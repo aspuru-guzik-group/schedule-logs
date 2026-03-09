@@ -88,10 +88,15 @@ if not group_slug or group_slug not in GROUPS:
         st.markdown("**Select a subgroup meeting:**")
         st.write("")
         for slug, grp in GROUPS.items():
+            configured = slug in st.secrets
+            label = f"{grp['emoji']}  {grp['display_name']}"
+            if not configured:
+                label += "  (coming soon)"
             st.link_button(
-                f"{grp['emoji']}  {grp['display_name']}",
+                label,
                 f"?group={slug}",
                 use_container_width=True,
+                disabled=not configured,
             )
     st.stop()
 
@@ -101,13 +106,16 @@ if not group_slug or group_slug not in GROUPS:
 group = GROUPS[group_slug]
 
 if group_slug not in st.secrets:
-    st.error(
-        f"Configuration for '{group['display_name']}' not found. "
-        "Please ask the administrator to set up secrets for this group."
-    )
-    if st.button("Back to Home"):
-        st.query_params.clear()
-        st.rerun()
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        st.image("logo.png", width=100)
+        st.write("")
+        st.warning(
+            f"**{group['emoji']} {group['display_name']}** has not been configured yet.\n\n"
+            "The admin for this subgroup needs to create a `secrets/<group>.toml` file "
+            "and redeploy. See the README for instructions."
+        )
+        st.link_button("Back to Home", "/", use_container_width=True)
     st.stop()
 
 group_secrets = st.secrets[group_slug]
