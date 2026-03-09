@@ -41,17 +41,17 @@ cd ~/schedule-logs
 # Copy secrets from your local machine:
 #   scp -r secrets/ user@schedule.matter.toronto.edu:~/schedule-logs/secrets/
 
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
 ### 4. Redeploy
 
 ```bash
 # After code changes:
-git pull && docker compose up -d --build
+git pull && docker-compose up -d --build
 
 # After secrets-only changes (no rebuild needed):
-docker compose restart
+docker-compose restart
 ```
 
 ## Local dev
