@@ -27,6 +27,8 @@ The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, 
 
 The shared GCP service account goes in `secrets/shared.toml` (copy from `secrets/shared.toml.example`).
 
+**No email passwords are stored in secrets.** Admins enter their email credentials in the app each session when sending confirmation emails.
+
 ### 3. Deploy
 
 Build on the cluster (avoids ARM/x86 mismatch from Mac):
@@ -61,6 +63,30 @@ cat secrets/*.toml > .streamlit/secrets.toml
 streamlit run app.py
 ```
 
+## Sending confirmation emails
+
+When you click **Send Confirmation Emails** in the admin panel, the app asks for your email and password. It auto-detects the provider from your email domain:
+
+| Domain | Provider | What to enter |
+|--------|----------|---------------|
+| `cs.toronto.edu` | UofT CS | Your CS lab password |
+| `utoronto.ca` / `mail.utoronto.ca` | UofT Outlook | Your UTORid password |
+| `gmail.com` | Gmail | A **Gmail App Password** (see below) |
+
+Credentials are kept in memory for the session only — never saved to disk or sheets.
+
+### Gmail App Password setup
+
+Gmail blocks regular password login. You need a one-time App Password:
+
+1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+2. You may need to enable 2-Step Verification first at [myaccount.google.com/signinoptions/two-step-verification](https://myaccount.google.com/signinoptions/two-step-verification)
+3. On the App Passwords page, type a name (e.g. "MatterLab Schedule") and click **Create**
+4. Google shows a 16-character password like `abcd efgh ijkl mnop` — copy it
+5. Paste that into the **App Password** field in the send dialog
+
+You only need to generate this once. Save it somewhere safe (e.g. a password manager) — Google won't show it again.
+
 ## Admin panel
 
-Each group's admin logs in via the sidebar password. From there you can also update SMTP credentials, Drive folder IDs, and GCP service account JSON — stored in the group's Google Sheet so no redeployment is needed.
+Each group's admin logs in via the sidebar password. From there you can manage participants, edit schedules, and update Drive folder IDs / GCP service account JSON.

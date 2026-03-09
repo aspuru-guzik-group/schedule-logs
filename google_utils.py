@@ -347,12 +347,22 @@ def send_email_via_smtp(smtp_conn, sender, to, subject, message_text):
     smtp_conn.sendmail(sender, to, message.as_string())
 
 
-SMTP_PRESETS = {
-    "UofT CS": {"server": "smtp.cs.toronto.edu", "port": 587},
-    "Gmail": {"server": "smtp.gmail.com", "port": 587},
-    "Outlook / Office 365": {"server": "smtp.office365.com", "port": 587},
-    "Custom": {"server": "", "port": 587},
+SUPPORTED_DOMAINS = {
+    "cs.toronto.edu": {"server": "smtp.cs.toronto.edu", "port": 587, "label": "UofT CS"},
+    "utoronto.ca": {"server": "smtp.office365.com", "port": 587, "label": "UofT (Outlook)"},
+    "mail.utoronto.ca": {"server": "smtp.office365.com", "port": 587, "label": "UofT (Outlook)"},
+    "gmail.com": {"server": "smtp.gmail.com", "port": 587, "label": "Gmail"},
+    "googlemail.com": {"server": "smtp.gmail.com", "port": 587, "label": "Gmail"},
 }
+
+
+def _detect_provider(email):
+    """Return (smtp_server, smtp_port, label, is_gmail) from email domain, or None if unsupported."""
+    domain = email.strip().split("@")[-1].lower() if "@" in email else ""
+    if domain in SUPPORTED_DOMAINS:
+        info = SUPPORTED_DOMAINS[domain]
+        return info["server"], info["port"], info["label"], domain in ("gmail.com", "googlemail.com")
+    return None
 
 
 @st.dialog("Send Confirmation Emails", width="large")
@@ -370,39 +380,53 @@ def recipients_dialog(
     st.markdown("**Your email credentials** (used only for this session)")
     smtp_key = f"{group_slug}_smtp"
 
-    preset = st.selectbox(
-        "Email provider:",
-        options=list(SMTP_PRESETS.keys()),
-        key="smtp_preset",
-    )
-    preset_vals = SMTP_PRESETS[preset]
-
-    default_server = preset_vals["server"] or st.session_state.get(f"{smtp_key}_server", "")
-    default_port = preset_vals["port"]
-
-    if preset == "Custom":
-        smtp_server = st.text_input(
-            "SMTP Server:", value=default_server, key="smtp_server_dlg"
-        )
-        smtp_port = st.number_input(
-            "SMTP Port:", value=default_port, key="smtp_port_dlg"
-        )
-    else:
-        smtp_server = default_server
-        smtp_port = default_port
-
     sender_email = st.text_input(
-        "Your email:",
+        "Your email address:",
         value=st.session_state.get(f"{smtp_key}_email", ""),
         key="sender_email_dlg",
     )
-    smtp_password = st.text_input(
-        "Your email password:",
-        type="password",
-        value=st.session_state.get(f"{smtp_key}_password", ""),
-        key="smtp_password_dlg",
-        help="For Gmail, use an App Password (not your regular password).",
-    )
+
+    # Auto-detect provider from the email domain
+    provider = _detect_provider(sender_email) if sender_email else None
+    smtp_server = ""
+    smtp_port = 587
+    is_gmail = False
+    can_send = False
+
+    if not sender_email:
+        pass  # waiting for input
+    elif provider is None:
+        domain = sender_email.split("@")[-1] if "@" in sender_email else sender_email
+        st.error(
+            f"**{domain}** is not supported. "
+            "Supported domains: `cs.toronto.edu`, `utoronto.ca`, `gmail.com`."
+        )
+    else:
+        smtp_server, smtp_port, label, is_gmail = provider
+        st.caption(f"Detected: **{label}** (`{smtp_server}:{smtp_port}`)")
+
+        if is_gmail:
+            st.info(
+                "Gmail requires an **App Password** (not your regular password).  \n"
+                "Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) "
+                "to generate one. See the README for a step-by-step guide."
+            )
+            smtp_password = st.text_input(
+                "App Password:",
+                type="password",
+                value=st.session_state.get(f"{smtp_key}_password", ""),
+                key="smtp_password_dlg",
+                placeholder="xxxx xxxx xxxx xxxx",
+            )
+        else:
+            smtp_password = st.text_input(
+                "Password:",
+                type="password",
+                value=st.session_state.get(f"{smtp_key}_password", ""),
+                key="smtp_password_dlg",
+            )
+
+        can_send = bool(smtp_password)
 
     st.write("---")
 
@@ -414,7 +438,7 @@ def recipients_dialog(
         key="selected_recipients",
     )
 
-    if st.button("Send Emails"):
+    if st.button("Send Emails", disabled=not can_send):
         if not sender_email or not smtp_password:
             st.error("Please enter your email and password.")
             return
@@ -422,7 +446,6 @@ def recipients_dialog(
         # Cache credentials in session for convenience
         st.session_state[f"{smtp_key}_email"] = sender_email
         st.session_state[f"{smtp_key}_password"] = smtp_password
-        st.session_state[f"{smtp_key}_server"] = smtp_server
 
         confirmations_sent = 0
         error_msgs = []
@@ -432,10 +455,9 @@ def recipients_dialog(
             )
         except Exception as e:
             st.error(f"Login failed: {e}")
-            if "smtp.gmail.com" in smtp_server:
+            if is_gmail:
                 st.info(
-                    "For Gmail you need an App Password. "
-                    "Go to myaccount.google.com > Security > App Passwords."
+                    "Make sure you're using an App Password, not your regular password."
                 )
             return
 
