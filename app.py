@@ -137,10 +137,6 @@ with top_container:
     with col2:
         st.title(group["short_name"])
 
-if st.button("< All Meetings"):
-    st.query_params.clear()
-    st.rerun()
-
 st.write("---")
 
 
@@ -450,7 +446,7 @@ else:
     schedule_placeholder = st.container()
 
     st.markdown(
-        """**Status:** Accepted -- Pending confirmation -- Cancelled"""
+        """**Status:** ⚫ Accepted — 🔵 Pending confirmation — 🔴 Cancelled"""
     )
     col1, col2 = st.columns([0.3, 1])
     with col1:
@@ -504,6 +500,12 @@ else:
 
                 with col1:
                     if st.button("Save Changes"):
+                        # Normalize blank/lowercase "empty" to "EMPTY"
+                        for col in presenter_cols:
+                            if col in edited_df.columns:
+                                edited_df[col] = edited_df[col].apply(
+                                    lambda v: "EMPTY" if str(v).strip().lower() in ("", "empty") else str(v).strip()
+                                )
                         updated_df = df_full.copy()
                         if "Date" in edited_df.columns:
                             edited_df["Date"] = pd.to_datetime(
@@ -862,4 +864,9 @@ else:
                 else:
                     st.warning("Please paste a valid JSON.")
 
-    st.markdown("""**Activity:** Low -- Avg. -- High""")
+    st.markdown("""**Activity:** 🟥 Low — 🟨 Avg. — 🟩 High""")
+
+    st.write("---")
+    if st.button("< All Meetings"):
+        st.query_params.clear()
+        st.rerun()
