@@ -325,7 +325,7 @@ elif "date" in params:
                 try:
                     from googleapiclient.errors import HttpError
 
-                    drive_service = gu.get_drive_service()
+                    drive_service = gu.get_drive_service(group_slug)
                     drive_service.files().get(fileId=SLIDES_TEMPLATE_ID).execute()
                 except HttpError as e:
                     st.error(f"Template file not found or access denied: {e}")
@@ -336,6 +336,7 @@ elif "date" in params:
                     SLIDES_TEMPLATE_ID,
                     folder_id=SLIDES_FOLDER_ID,
                     meeting_title=group["meeting_title"],
+                    group_slug=group_slug,
                 )
                 if presentation_id and presentation_link:
                     gu.add_slide_entry(
@@ -400,6 +401,7 @@ elif "date" in params:
                         pdf_bytes,
                         "application/pdf",
                         parent_folder_id=FOLDER_ID,
+                        group_slug=group_slug,
                     )
                 gu.add_material(
                     selected_date_str,

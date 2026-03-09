@@ -23,8 +23,13 @@ SCOPES = [
 ###############################################################################
 
 
-def get_gspread_client():
-    service_account_info = dict(st.secrets["gcp_service_account"])
+def _get_service_account_info(group_slug):
+    """Get GCP service account info for a group. Each group has its own."""
+    return dict(st.secrets[group_slug]["gcp_service_account"])
+
+
+def get_gspread_client(group_slug):
+    service_account_info = _get_service_account_info(group_slug)
     credentials = Credentials.from_service_account_info(
         service_account_info, scopes=SCOPES
     )
@@ -32,7 +37,7 @@ def get_gspread_client():
 
 
 def get_sheet(sheet_name, group_slug):
-    client = get_gspread_client()
+    client = get_gspread_client(group_slug)
     spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
     return client.open_by_key(spreadsheet_id).worksheet(sheet_name)
 
@@ -73,16 +78,16 @@ def save_participants_list(participants, group_slug):
     ws.update(data)
 
 
-def get_drive_service():
-    service_account_info = dict(st.secrets["gcp_service_account"])
+def get_drive_service(group_slug):
+    service_account_info = _get_service_account_info(group_slug)
     credentials = Credentials.from_service_account_info(
         service_account_info, scopes=SCOPES
     )
     return build("drive", "v3", credentials=credentials)
 
 
-def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None):
-    drive_service = get_drive_service()
+def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None, group_slug=None):
+    drive_service = get_drive_service(group_slug)
     media = MediaInMemoryUpload(file_bytes, mimetype=mime_type)
     file_metadata = {"name": file_name}
     if parent_folder_id:
@@ -111,14 +116,14 @@ def delete_material_row(row_index, group_slug):
 ###############################################################################
 
 
-def get_slides_service():
+def get_slides_service(group_slug):
     credentials = Credentials.from_service_account_info(
-        dict(st.secrets["gcp_service_account"]), scopes=SCOPES
+        _get_service_account_info(group_slug), scopes=SCOPES
     )
     return build("slides", "v1", credentials=credentials)
 
 
-def generate_presentation(date, presenters, template_id, folder_id, meeting_title):
+def generate_presentation(date, presenters, template_id, folder_id, meeting_title, group_slug=None):
     """Generate a presentation from template.
 
     Args:
@@ -127,9 +132,10 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
         template_id: Google Slides template file ID
         folder_id: destination folder ID
         meeting_title: title for the presentation
+        group_slug: group identifier for GCP credentials
     """
-    drive_service = get_drive_service()
-    slides_service = get_slides_service()
+    drive_service = get_drive_service(group_slug)
+    slides_service = get_slides_service(group_slug)
 
     copy_body = {"name": f"{date} {meeting_title}"}
     copied_file = (
@@ -272,7 +278,7 @@ def save_group_settings(group_slug, settings_dict):
     try:
         ws = get_sheet("Settings", group_slug)
     except gspread.exceptions.WorksheetNotFound:
-        client = get_gspread_client()
+        client = get_gspread_client(group_slug)
         spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
         spreadsheet = client.open_by_key(spreadsheet_id)
         ws = spreadsheet.add_worksheet(title="Settings", rows=20, cols=2)
@@ -307,7 +313,7 @@ def save_gcp_config(group_slug, gcp_json_str):
     try:
         ws = get_sheet("GCPConfig", group_slug)
     except gspread.exceptions.WorksheetNotFound:
-        client = get_gspread_client()
+        client = get_gspread_client(group_slug)
         spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
         spreadsheet = client.open_by_key(spreadsheet_id)
         ws = spreadsheet.add_worksheet(title="GCPConfig", rows=20, cols=2)
