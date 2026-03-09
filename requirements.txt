@@ -1,6 +1,7 @@
+numpy<2
 streamlit
 pandas
-gspread 
+gspread
 google-auth
 google-api-python-client
 cryptography
