@@ -4,9 +4,48 @@ Unified schedule app for all MatterLab subgroup meetings at `schedule.matter.tor
 
 ## Setup
 
-### 1. Create a Google Sheet
+### 1. Create a GCP service account
 
-Create a sheet with these tabs (share it with the GCP service account email as Editor):
+Each subgroup needs its own Google Cloud service account to access Sheets, Drive, and Slides.
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
+2. Create a new project (or use an existing one) — the `project_id` in your secrets comes from here
+3. Enable these APIs for the project (search each in the top bar and click **Enable**):
+   - [Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+   - [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+   - [Google Slides API](https://console.cloud.google.com/apis/library/slides.googleapis.com)
+4. Go to [IAM & Admin > Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
+5. Click **Create Service Account**, give it a name (e.g. `schedule-ml`), click **Done**
+6. Click the new service account, go to the **Keys** tab
+7. Click **Add Key > Create new key > JSON** — a `.json` file downloads
+
+That JSON file contains everything you need for the `[groupslug.gcp_service_account]` section:
+
+| JSON field | Secrets field |
+|-----------|---------------|
+| `type` | `type` (always `"service_account"`) |
+| `project_id` | `project_id` |
+| `private_key_id` | `private_key_id` |
+| `private_key` | `private_key` (the long `-----BEGIN PRIVATE KEY-----...` string) |
+| `client_email` | `client_email` (e.g. `schedule-ml@myproject.iam.gserviceaccount.com`) |
+| `client_id` | `client_id` |
+| `auth_uri` | `auth_uri` |
+| `token_uri` | `token_uri` |
+| `auth_provider_x509_cert_url` | `auth_provider_x509_cert_url` |
+| `client_x509_cert_url` | `client_x509_cert_url` |
+
+Copy each value from the JSON into your `secrets/groupslug.toml` under `[groupslug.gcp_service_account]`.
+
+### 2. Create a Google Sheet
+
+Create a new Google Sheet and share it with the service account's `client_email` as **Editor**.
+
+The `spreadsheet_id` is the long string in the Sheet URL:
+```
+https://docs.google.com/spreadsheets/d/THIS_IS_THE_SPREADSHEET_ID/edit
+```
+
+Add these tabs (exact names):
 
 | Tab | Columns |
 |-----|---------|
@@ -15,7 +54,32 @@ Create a sheet with these tabs (share it with the GCP service account email as E
 | `Materials` | `Date`, `Title`, `Description`, `PDF_Name`, `PDF_Link` |
 | `Slides` | `Date`, `Presentation_ID`, `Presentation_Link` |
 
-### 2. Create your secrets file
+### 3. Create Google Drive folders
+
+Create two folders in Google Drive and share both with the service account `client_email` as **Editor**:
+
+- **Materials folder** — for uploaded PDFs → this is `folder_id`
+- **Slides folder** — for generated slide decks → this is `slides_folder_id`
+
+The folder ID is in the URL:
+```
+https://drive.google.com/drive/folders/THIS_IS_THE_FOLDER_ID
+```
+
+### 4. Create a Slides template
+
+Create a Google Slides presentation to use as a template. Add these placeholders in the slides:
+
+- `{{DATE}}` — replaced with the meeting date
+- `{{PRESENTER}}` — for 1-presenter groups
+- `{{PRESENTER1}}`, `{{PRESENTER2}}` — for ML (2-presenter) group
+
+Share it with the service account `client_email` as **Viewer**. The `slides_template_id` is in the URL:
+```
+https://docs.google.com/presentation/d/THIS_IS_THE_TEMPLATE_ID/edit
+```
+
+### 5. Create your secrets file
 
 Each subgroup has its own file in `secrets/`. Copy the example and fill it in:
 
@@ -25,11 +89,18 @@ cp secrets/group.toml.example secrets/ml.toml   # or quantum.toml, general.toml,
 
 The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, `[drugdiscovery]`, `[handson]`.
 
-The shared GCP service account goes in `secrets/shared.toml` (copy from `secrets/shared.toml.example`).
+The remaining fields:
+
+| Field | What it is |
+|-------|-----------|
+| `admin_password` | Password to access the admin panel (you pick this) |
+| `organizer_name` | Name shown in confirmation emails (e.g. "Luis Mantilla") |
+| `zoom_link` | Zoom meeting URL for this subgroup |
+| `encryption_key` | Any secret string used to encrypt confirmation links (you pick this) |
 
 **No email passwords are stored in secrets.** Admins enter their email credentials in the app each session when sending confirmation emails.
 
-### 3. Deploy
+### 6. Deploy
 
 Build on the cluster (avoids ARM/x86 mismatch from Mac):
 
@@ -44,11 +115,11 @@ cd ~/schedule-logs
 docker-compose up -d --build
 ```
 
-### 4. Redeploy
+### 7. Redeploy
 
 ```bash
 # After code changes:
-git pull && docker-compose up -d --build
+git pull && docker-compose down && docker-compose up -d --build
 
 # After secrets-only changes (no rebuild needed):
 docker-compose restart
