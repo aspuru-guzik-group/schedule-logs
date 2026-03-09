@@ -3,6 +3,6 @@ __pycache__
 *.pyc
 old/
 .devcontainer/
-README.md
 .env
+secrets/
 .streamlit/secrets.toml

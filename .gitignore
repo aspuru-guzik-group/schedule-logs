@@ -1,4 +1,6 @@
 .streamlit/secrets.toml
+secrets/*.toml
+!secrets/*.example
 service_acc.json
 __pycache__/
 schedule.csv
