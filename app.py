@@ -775,52 +775,21 @@ else:
         else:
             st.info("No participants available to remove.")
 
-        # ----- EMAIL & INTEGRATION SETTINGS -----
+        # ----- INTEGRATION SETTINGS -----
         st.write("---")
         st.subheader("Admin Settings")
 
-        with st.expander("Email / SMTP Configuration"):
+        with st.expander("General"):
             current_settings = gu.get_group_settings(group_slug)
-            new_sender = st.text_input(
-                "Sender Email:",
-                value=current_settings["sender_email"],
-                key="smtp_sender",
-            )
-            new_smtp_server = st.text_input(
-                "SMTP Server:",
-                value=current_settings["smtp_server"],
-                key="smtp_server_input",
-            )
-            new_smtp_port = st.number_input(
-                "SMTP Port:",
-                value=current_settings["smtp_port"],
-                key="smtp_port_input",
-            )
             new_organizer = st.text_input(
                 "Organizer Name:",
                 value=current_settings["organizer_name"],
-                key="smtp_organizer",
+                key="organizer_input",
             )
-            new_smtp_password = st.text_input(
-                "SMTP Password:",
-                type="password",
-                key="smtp_password",
-                placeholder="Enter new password (leave empty to keep current)",
-            )
-
-            if st.button("Save Email Settings"):
-                save_settings = {
-                    "sender_email": new_sender,
-                    "smtp_server": new_smtp_server,
-                    "smtp_port": str(int(new_smtp_port)),
-                    "organizer_name": new_organizer,
-                }
-                if new_smtp_password:
-                    save_settings["smtp_password"] = new_smtp_password
-                else:
-                    save_settings["smtp_password"] = current_settings["smtp_password"]
-                gu.save_group_settings(group_slug, save_settings)
-                st.success("Email settings saved!")
+            if st.button("Save General Settings"):
+                current_settings["organizer_name"] = new_organizer
+                gu.save_group_settings(group_slug, current_settings)
+                st.success("Settings saved!")
 
         with st.expander("Google Drive / Slides Configuration"):
             new_folder_id = st.text_input(

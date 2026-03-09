@@ -231,12 +231,11 @@ def add_slide_entry(date_str, presentation_id, presentation_link, group_slug):
 
 
 def get_group_settings(group_slug):
-    """Get admin-configurable settings. Sheet overrides take precedence over secrets.toml."""
+    """Get admin-configurable settings. Sheet overrides take precedence over secrets.toml.
+    Note: SMTP email/password are NOT stored here — they are prompted at send time."""
     group_secrets = st.secrets.get(group_slug, {})
     settings = {
-        "sender_email": group_secrets.get("sender_email", ""),
-        "smtp_password": group_secrets.get("smtp_password", ""),
-        "smtp_server": group_secrets.get("smtp_server", ""),
+        "smtp_server": group_secrets.get("smtp_server", "smtp.cs.toronto.edu"),
         "smtp_port": int(group_secrets.get("smtp_port", 587)),
         "organizer_name": group_secrets.get("organizer_name", ""),
         "folder_id": group_secrets.get("folder_id", ""),
@@ -250,7 +249,6 @@ def get_group_settings(group_slug):
         records = ws.get_all_records()
         overrides = {str(r["Key"]): str(r["Value"]) for r in records if r.get("Key")}
         for key in [
-            "sender_email",
             "smtp_server",
             "organizer_name",
             "folder_id",
@@ -262,13 +260,6 @@ def get_group_settings(group_slug):
                 settings[key] = overrides[key]
         if "smtp_port" in overrides and overrides["smtp_port"]:
             settings["smtp_port"] = int(overrides["smtp_port"])
-        if "smtp_password" in overrides and overrides["smtp_password"]:
-            try:
-                settings["smtp_password"] = decrypt_name(
-                    overrides["smtp_password"], group_slug
-                )
-            except Exception:
-                pass  # Use default from secrets
         if "encryption_key" in overrides and overrides["encryption_key"]:
             settings["encryption_key"] = overrides["encryption_key"]
     except Exception:
@@ -277,7 +268,7 @@ def get_group_settings(group_slug):
 
 
 def save_group_settings(group_slug, settings_dict):
-    """Save admin settings to the Settings sheet. SMTP password is encrypted."""
+    """Save admin settings to the Settings sheet."""
     try:
         ws = get_sheet("Settings", group_slug)
     except gspread.exceptions.WorksheetNotFound:
@@ -288,8 +279,6 @@ def save_group_settings(group_slug, settings_dict):
 
     data = [["Key", "Value"]]
     for key, value in settings_dict.items():
-        if key == "smtp_password" and value:
-            value = encrypt_name(value, group_slug)
         data.append([key, str(value)])
     ws.clear()
     ws.update(data)
@@ -343,11 +332,10 @@ def save_gcp_config(group_slug, gcp_json_str):
 ###############################################################################
 
 
-def get_smtp_connection(group_slug):
-    settings = get_group_settings(group_slug)
-    server = smtplib.SMTP(settings["smtp_server"], settings["smtp_port"])
+def get_smtp_connection(smtp_server, smtp_port, sender_email, smtp_password):
+    server = smtplib.SMTP(smtp_server, smtp_port)
     server.starttls()
-    server.login(settings["sender_email"], settings["smtp_password"])
+    server.login(sender_email, smtp_password)
     return server
 
 
@@ -359,31 +347,96 @@ def send_email_via_smtp(smtp_conn, sender, to, subject, message_text):
     smtp_conn.sendmail(sender, to, message.as_string())
 
 
-@st.dialog("Send Confirmation Emails")
+SMTP_PRESETS = {
+    "UofT CS": {"server": "smtp.cs.toronto.edu", "port": 587},
+    "Gmail": {"server": "smtp.gmail.com", "port": 587},
+    "Outlook / Office 365": {"server": "smtp.office365.com", "port": 587},
+    "Custom": {"server": "", "port": 587},
+}
+
+
+@st.dialog("Send Confirmation Emails", width="large")
 def recipients_dialog(
     pending_options,
     pending_mapping,
     participant_emails,
     app_url,
     organizer,
-    sender,
     email_subject,
     group_slug,
     group_name,
 ):
+    # --- SMTP credentials (session-only, never saved to disk) ---
+    st.markdown("**Your email credentials** (used only for this session)")
+    smtp_key = f"{group_slug}_smtp"
+
+    preset = st.selectbox(
+        "Email provider:",
+        options=list(SMTP_PRESETS.keys()),
+        key="smtp_preset",
+    )
+    preset_vals = SMTP_PRESETS[preset]
+
+    default_server = preset_vals["server"] or st.session_state.get(f"{smtp_key}_server", "")
+    default_port = preset_vals["port"]
+
+    if preset == "Custom":
+        smtp_server = st.text_input(
+            "SMTP Server:", value=default_server, key="smtp_server_dlg"
+        )
+        smtp_port = st.number_input(
+            "SMTP Port:", value=default_port, key="smtp_port_dlg"
+        )
+    else:
+        smtp_server = default_server
+        smtp_port = default_port
+
+    sender_email = st.text_input(
+        "Your email:",
+        value=st.session_state.get(f"{smtp_key}_email", ""),
+        key="sender_email_dlg",
+    )
+    smtp_password = st.text_input(
+        "Your email password:",
+        type="password",
+        value=st.session_state.get(f"{smtp_key}_password", ""),
+        key="smtp_password_dlg",
+        help="For Gmail, use an App Password (not your regular password).",
+    )
+
+    st.write("---")
+
+    # --- Recipient selection ---
     selected = st.multiselect(
         "Select recipients to send emails to:",
         options=pending_options,
         default=pending_options,
         key="selected_recipients",
     )
-    if st.button("Confirm Selection"):
+
+    if st.button("Send Emails"):
+        if not sender_email or not smtp_password:
+            st.error("Please enter your email and password.")
+            return
+
+        # Cache credentials in session for convenience
+        st.session_state[f"{smtp_key}_email"] = sender_email
+        st.session_state[f"{smtp_key}_password"] = smtp_password
+        st.session_state[f"{smtp_key}_server"] = smtp_server
+
         confirmations_sent = 0
         error_msgs = []
         try:
-            smtp_conn = get_smtp_connection(group_slug)
+            smtp_conn = get_smtp_connection(
+                smtp_server, smtp_port, sender_email, smtp_password
+            )
         except Exception as e:
-            st.error(f"Error initializing SMTP connection: {e}")
+            st.error(f"Login failed: {e}")
+            if "smtp.gmail.com" in smtp_server:
+                st.info(
+                    "For Gmail you need an App Password. "
+                    "Go to myaccount.google.com > Security > App Passwords."
+                )
             return
 
         for option in selected:
@@ -418,7 +471,11 @@ def recipients_dialog(
             )
             try:
                 send_email_via_smtp(
-                    smtp_conn, sender, to_email, email_subject, email_message_text
+                    smtp_conn,
+                    sender_email,
+                    to_email,
+                    email_subject,
+                    email_message_text,
                 )
                 confirmations_sent += 1
             except Exception as e:
@@ -487,7 +544,6 @@ def send_confirmation_emails(group_slug, group_config):
         pending_mapping[display] = entry
 
     settings = get_group_settings(group_slug)
-    sender = settings["sender_email"]
     organizer = settings["organizer_name"]
     app_url = st.secrets.get("app_url", "")
     email_subject = group_config["email_subject"]
@@ -498,7 +554,6 @@ def send_confirmation_emails(group_slug, group_config):
         participant_emails,
         app_url,
         organizer,
-        sender,
         email_subject,
         group_slug,
         group_config["display_name"],
