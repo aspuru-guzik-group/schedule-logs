@@ -2,8 +2,8 @@
   <body>
     <p>Dear {name_presenter},</p>
     <p>
-      You have been randomly scheduled to present on {date} in the ML subgroup, but your status is pending confirmation.
-      Please confirm, reschedule, or decline your participation by clicking 
+      You have been randomly scheduled to present on {date} in the {group_name}, but your status is pending confirmation.
+      Please confirm, reschedule, or decline your participation by clicking
       <a href="{confirmation_link}">here</a>.
     </p>
     <p>Thank you!<br>{name_organizer}</p>

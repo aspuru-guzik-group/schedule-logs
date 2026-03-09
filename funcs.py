@@ -7,13 +7,20 @@ from cryptography.fernet import Fernet
 import base64
 import streamlit as st
 
+from config import DAY_MAP
 
-def get_next_wednesday(after_date):
-    # Wednesday is weekday() == 2
-    days_ahead = 2 - after_date.weekday()
-    if days_ahead <= 0:  # Target day already passed this week
+
+def get_next_day_of_week(after_date, day_name):
+    """Get the next occurrence of a given day of the week after after_date."""
+    target = DAY_MAP[day_name.lower()]
+    days_ahead = target - after_date.weekday()
+    if days_ahead <= 0:
         days_ahead += 7
     return after_date + datetime.timedelta(days=days_ahead)
+
+
+def get_next_wednesday(after_date):
+    return get_next_day_of_week(after_date, "wednesday")
 
 
 def highlight_empty(val):
@@ -21,19 +28,22 @@ def highlight_empty(val):
 
 
 def highlight_random(val):
-    # make light blue if val starts with [P]
+    if not isinstance(val, str):
+        return ""
     color = "background-color: darkblue" if val.startswith("[P]") else ""
     color = "background-color: darkred" if val.startswith("[C]") else color
     color = "background-color: darkblue" if val.startswith("[R]") else color
     return color
 
 
-def get_fernet():
-    # Retrieve the encryption key string from secrets.toml
-    encryption_key_str = st.secrets["encryption_key"]["value"]
+def get_fernet(group_slug=None):
+    """Get a Fernet cipher. Uses group-specific encryption key if group_slug provided."""
+    if group_slug:
+        encryption_key_str = st.secrets[group_slug]["encryption_key"]
+    else:
+        encryption_key_str = st.secrets["encryption_key"]["value"]
     encryption_key_bytes = encryption_key_str.encode("utf-8")
-    # Use a constant salt (must be the same for encryption and decryption)
-    salt = b"mlatml_salt"
+    salt = f"{group_slug or 'mlatml'}_salt".encode()
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -45,13 +55,13 @@ def get_fernet():
     return Fernet(derived_key)
 
 
-def encrypt_name(name: str) -> str:
-    f = get_fernet()
+def encrypt_name(name: str, group_slug: str = None) -> str:
+    f = get_fernet(group_slug)
     encrypted = f.encrypt(name.encode("utf-8"))
     return encrypted.decode("utf-8")
 
 
-def decrypt_name(encrypted_name: str) -> str:
-    f = get_fernet()
+def decrypt_name(encrypted_name: str, group_slug: str = None) -> str:
+    f = get_fernet(group_slug)
     decrypted = f.decrypt(encrypted_name.encode("utf-8"))
     return decrypted.decode("utf-8")

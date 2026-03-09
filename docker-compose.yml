@@ -1,0 +1,8 @@
+services:
+  schedule:
+    build: .
+    ports:
+      - "3000:8501"
+    volumes:
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+    restart: unless-stopped
