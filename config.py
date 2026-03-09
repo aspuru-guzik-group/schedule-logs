@@ -24,7 +24,7 @@ GROUPS = {
     "ml": {
         "display_name": "Machine Learning Subgroup",
         "short_name": "ML@ML",
-        "emoji": "🤖",
+        "emoji": "🧠",
         "num_presenters": 2,
         "meeting_day": "wednesday",
         "presentation_duration": 20,
