@@ -867,6 +867,6 @@ else:
     st.markdown("""**Activity:** 🟥 Low — 🟨 Avg. — 🟩 High""")
 
     st.write("---")
-    if st.button("< All Meetings"):
+    if st.button("Back to schedules"):
         st.query_params.clear()
         st.rerun()
