@@ -98,12 +98,14 @@ if not group_slug or group_slug not in GROUPS:
             label = f"{grp['emoji']}  {grp['display_name']}"
             if not configured:
                 label += "  (coming soon)"
-            st.link_button(
+            if st.button(
                 label,
-                f"?group={slug}",
                 use_container_width=True,
                 disabled=not configured,
-            )
+                key=f"group_{slug}",
+            ):
+                st.query_params["group"] = slug
+                st.rerun()
     st.stop()
 
 ###############################################
@@ -121,7 +123,9 @@ if group_slug not in st.secrets:
             "The admin for this subgroup needs to create a `secrets/<group>.toml` file "
             "and redeploy. See the README for instructions."
         )
-        st.link_button("Back to Home", "/", use_container_width=True)
+        if st.button("Back to Home", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
     st.stop()
 
 group_secrets = st.secrets[group_slug]
