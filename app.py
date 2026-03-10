@@ -224,9 +224,9 @@ if "confirmation" in params:
 
     st.write("**Please select one of the options below:**")
 
-    confirm_clicked = st.button("Confirm", key="confirm")
-    reschedule_clicked = st.button("Reschedule", key="reschedule")
-    dont_want_clicked = st.button("Decline", key="dont_want")
+    confirm_clicked = st.button("Confirm ✅", key="confirm")
+    reschedule_clicked = st.button("Reschedule 🔄", key="reschedule")
+    dont_want_clicked = st.button("Decline ❌", key="dont_want")
 
     clicked_option = None
     if confirm_clicked:
