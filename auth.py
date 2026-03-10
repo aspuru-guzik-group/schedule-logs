@@ -157,7 +157,19 @@ def require_auth():
                         time.sleep(1)  # Let cookie write complete
                         st.rerun()
 
-        st.error("Authentication failed. Please try again.")
+        st.error("Authentication failed. Make sure you're signing in with the **MatterLab** Slack workspace, not another one.")
+        st.info(
+            "**Wrong Slack workspace?** If your browser is logged into a different "
+            "Slack workspace, the sign-in will redirect there instead of MatterLab. To fix this:\n"
+            "1. Open [slack.com/signin](https://slack.com/signin) and sign into the **Aspuru-Guzik Group** workspace first\n"
+            "2. Then click the button below to try again\n\n"
+            "Or try in an **incognito/private window**."
+        )
+        st.link_button(
+            "Try again",
+            _get_redirect_uri(),
+            use_container_width=True,
+        )
         st.stop()
 
     # 4. Show login page
@@ -167,7 +179,13 @@ def require_auth():
         st.markdown("## MatterLab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
         st.write("")
-        st.info("Sign in with your MatterLab Slack account to continue.")
+        st.info("Sign in with your **MatterLab (Aspuru-Guzik Group)** Slack account to continue.")
+        st.write("")
+        st.caption(
+            "Tip: If you're logged into a different Slack workspace in this browser, "
+            "the sign-in may redirect there instead. Use an incognito window or "
+            "[sign into the correct workspace](https://slack.com/signin) first."
+        )
         st.write("")
         auth_url = _get_auth_url()
         st.markdown(
