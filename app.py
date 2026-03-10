@@ -13,7 +13,7 @@ from auth import require_auth
 # PAGE CONFIG
 ###############################################
 st.set_page_config(
-    page_title="MatterLab Meetings",
+    page_title="The Matter Lab Meetings",
     page_icon="logo.png",
     initial_sidebar_state="collapsed",
     layout="centered",
@@ -88,7 +88,7 @@ if not group_slug or group_slug not in GROUPS:
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.image("logo.png", width=120)
-        st.markdown("## MatterLab Group Meetings")
+        st.markdown("## The Matter Lab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
         st.write("")
         st.markdown("**Select a subgroup meeting:**")

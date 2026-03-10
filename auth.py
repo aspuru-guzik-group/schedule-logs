@@ -136,7 +136,7 @@ def require_auth():
                 team_id = token_data.get("team", {}).get("id")
 
                 if team_id != config["team_id"]:
-                    st.error("You must be a member of the MatterLab Slack workspace.")
+                    st.error("You must be a member of the The Matter Lab Slack workspace.")
                     st.stop()
 
                 if user_token:
@@ -157,11 +157,11 @@ def require_auth():
                         time.sleep(1)  # Let cookie write complete
                         st.rerun()
 
-        st.error("Authentication failed. Make sure you're signing in with the **MatterLab** Slack workspace, not another one.")
+        st.error("Authentication failed. Make sure you're signing in with the **The Matter Lab** Slack workspace, not another one.")
         st.info(
             "**Wrong Slack workspace?** If your browser is logged into a different "
-            "Slack workspace, the sign-in will redirect there instead of MatterLab. To fix this:\n"
-            "1. Open [slack.com/signin](https://slack.com/signin) and sign into the **Aspuru-Guzik Group** workspace first\n"
+            "Slack workspace, the sign-in will redirect there instead of The Matter Lab. To fix this:\n"
+            "1. Open [slack.com/signin](https://slack.com/signin) and sign into the **Aspuru** workspace first\n"
             "2. Then click the button below to try again\n\n"
             "Or try in an **incognito/private window**."
         )
@@ -176,10 +176,10 @@ def require_auth():
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.image("logo.png", width=120)
-        st.markdown("## MatterLab Group Meetings")
+        st.markdown("## The Matter Lab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
         st.write("")
-        st.info("Sign in with your **MatterLab (Aspuru-Guzik Group)** Slack account to continue.")
+        st.info("Sign in with your **The Matter Lab (Aspuru)** Slack account to continue.")
         st.write("")
         st.caption(
             "Tip: If you're logged into a different Slack workspace in this browser, "
