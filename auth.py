@@ -181,12 +181,19 @@ def require_auth():
                         }
                         st.session_state["slack_user"] = user
 
-                        # Set persistent cookie
+                        # Set cookie and redirect via JS (st.rerun would
+                        # kill the page before the browser sets the cookie)
                         auth_token = _create_auth_token(user)
-                        _set_auth_cookie(auth_token)
-
-                        st.query_params.clear()
-                        st.rerun()
+                        max_age = COOKIE_MAX_AGE_DAYS * 86400
+                        redirect_uri = _get_redirect_uri()
+                        components.html(
+                            f"""<script>
+                            parent.document.cookie = "{COOKIE_NAME}={auth_token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
+                            parent.window.location.href = "{redirect_uri}";
+                            </script>""",
+                            height=0,
+                        )
+                        st.stop()
 
         st.error("Authentication failed. Please try again.")
         st.stop()
