@@ -109,8 +109,14 @@ def require_auth():
     if "slack_user" in st.session_state:
         return st.session_state["slack_user"]
 
-    # 2. Check persistent cookie
-    token = controller.get(COOKIE_NAME)
+    # 2. Wait for cookie controller to load (returns None while loading)
+    all_cookies = controller.getAll()
+    if all_cookies is None:
+        st.empty()  # Render nothing while loading
+        st.stop()
+
+    # 3. Check persistent cookie
+    token = all_cookies.get(COOKIE_NAME)
     if token:
         user = _verify_auth_token(token)
         if user:
