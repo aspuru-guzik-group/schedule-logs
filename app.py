@@ -7,6 +7,7 @@ import funcs as fns
 import google_utils as gu
 import assign_schedule as assign
 from config import GROUPS, get_presenter_cols
+from auth import require_auth
 
 ###############################################
 # PAGE CONFIG
@@ -17,6 +18,11 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
     layout="centered",
 )
+
+###############################################
+# AUTHENTICATION (Slack)
+###############################################
+user = require_auth()
 
 st.markdown(
     """
