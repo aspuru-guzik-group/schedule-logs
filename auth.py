@@ -109,17 +109,6 @@ def _verify_auth_token(token):
         return None
 
 
-def _set_auth_cookie(token):
-    """Set auth cookie on the parent page via JS."""
-    max_age = COOKIE_MAX_AGE_DAYS * 86400
-    components.html(
-        f"""<script>
-        parent.document.cookie = "{COOKIE_NAME}={token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
-        </script>""",
-        height=0,
-    )
-
-
 def _clear_auth_cookie():
     components.html(
         f"""<script>
@@ -181,21 +170,23 @@ def require_auth():
                         }
                         st.session_state["slack_user"] = user
 
-                        # Set cookie and redirect via JS (st.rerun would
-                        # kill the page before the browser sets the cookie)
+                        # Set cookie via components.html (runs JS in
+                        # same-origin iframe that can access parent doc)
+                        # then redirect after a short delay
                         auth_token = _create_auth_token(user)
                         max_age = COOKIE_MAX_AGE_DAYS * 86400
                         redirect_uri = _get_redirect_uri()
-                        st.markdown("Signing you in...")
-                        st.markdown(
-                            f'<meta http-equiv="refresh" content="1;url={redirect_uri}">'
+                        st.success("Signed in! Redirecting...")
+                        components.html(
                             f"""
                             <script>
-                            document.cookie = "{COOKIE_NAME}={auth_token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
-                            window.location.replace("{redirect_uri}");
+                            parent.document.cookie = "{COOKIE_NAME}={auth_token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
+                            setTimeout(function() {{
+                                parent.window.location.href = "{redirect_uri}";
+                            }}, 1500);
                             </script>
                             """,
-                            unsafe_allow_html=True,
+                            height=0,
                         )
                         st.stop()
 
