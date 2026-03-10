@@ -21,7 +21,7 @@ services:
       OAUTH2_PROXY_COOKIE_NAME: "_schedule_auth"
 
       # Restrict to your Slack workspace (REPLACE with your Team ID)
-      OAUTH2_PROXY_SLACK_TEAM: "REPLACE_WITH_TEAM_ID"
+      OAUTH2_PROXY_SLACK_TEAM: "T02G0R3HY"
 
       # Allow all emails in the workspace (team restriction is enough)
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
