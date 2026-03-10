@@ -179,12 +179,9 @@ def require_auth():
         st.markdown("## The Matter Lab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
         st.write("")
-        st.info("Sign in with your **The Matter Lab (Aspuru)** Slack account to continue.")
-        st.write("")
-        st.caption(
-            "Tip: If you're logged into a different Slack workspace in this browser, "
-            "the sign-in may redirect there instead. Use an incognito window or "
-            "[sign into the correct workspace](https://slack.com/signin) first."
+        st.info(
+            "Sign in with your **The Matter Lab** Slack account to continue.  \n"
+            "Wrong workspace? [Sign into the right one](https://slack.com/signin) first."
         )
         st.write("")
         auth_url = _get_auth_url()
