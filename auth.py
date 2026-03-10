@@ -1,6 +1,17 @@
 import streamlit as st
 import requests
 import urllib.parse
+import json
+import time
+import base64
+
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet, InvalidToken
+from streamlit_cookies_controller import CookieController
+
+COOKIE_NAME = "schedule_auth"
 
 
 def _get_slack_config():
@@ -56,15 +67,59 @@ def _get_user_identity(token):
     return data
 
 
+# --- Token encryption ---
+
+
+def _get_auth_fernet():
+    key_material = st.secrets["slack"]["client_secret"].encode()
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"schedule_auth_cookie",
+        iterations=100000,
+        backend=default_backend(),
+    )
+    derived_key = base64.urlsafe_b64encode(kdf.derive(key_material))
+    return Fernet(derived_key)
+
+
+def _create_auth_token(user_info):
+    f = _get_auth_fernet()
+    data = json.dumps({"user": user_info})
+    return f.encrypt(data.encode()).decode()
+
+
+def _verify_auth_token(token):
+    try:
+        f = _get_auth_fernet()
+        data = json.loads(f.decrypt(token.encode()).decode())
+        return data.get("user")
+    except (InvalidToken, json.JSONDecodeError, Exception):
+        return None
+
+
+# --- Main auth flow ---
+
+
 def require_auth():
     """Require Slack authentication. Returns user dict or shows login and stops."""
-    # Already authenticated this session
+    controller = CookieController(key="auth_cookies")
+
+    # 1. Already authenticated this session
     if "slack_user" in st.session_state:
         return st.session_state["slack_user"]
 
+    # 2. Check persistent cookie
+    token = controller.get(COOKIE_NAME)
+    if token:
+        user = _verify_auth_token(token)
+        if user:
+            st.session_state["slack_user"] = user
+            return user
+
     config = _get_slack_config()
 
-    # Check for OAuth callback (Slack redirected back with a code)
+    # 3. Check for OAuth callback
     params = st.query_params
     code = params.get("code")
     if code:
@@ -87,13 +142,19 @@ def require_auth():
                             "team": identity.get("team", {}).get("name", ""),
                         }
                         st.session_state["slack_user"] = user
+
+                        # Set persistent cookie
+                        auth_token = _create_auth_token(user)
+                        controller.set(COOKIE_NAME, auth_token)
+
                         st.query_params.clear()
+                        time.sleep(1)  # Let cookie write complete
                         st.rerun()
 
         st.error("Authentication failed. Please try again.")
         st.stop()
 
-    # Show login page
+    # 4. Show login page
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.image("logo.png", width=120)
