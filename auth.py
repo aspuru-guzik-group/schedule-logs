@@ -186,12 +186,16 @@ def require_auth():
                         auth_token = _create_auth_token(user)
                         max_age = COOKIE_MAX_AGE_DAYS * 86400
                         redirect_uri = _get_redirect_uri()
-                        components.html(
-                            f"""<script>
-                            parent.document.cookie = "{COOKIE_NAME}={auth_token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
-                            parent.window.location.href = "{redirect_uri}";
-                            </script>""",
-                            height=0,
+                        st.markdown("Signing you in...")
+                        st.markdown(
+                            f'<meta http-equiv="refresh" content="1;url={redirect_uri}">'
+                            f"""
+                            <script>
+                            document.cookie = "{COOKIE_NAME}={auth_token}; path=/; max-age={max_age}; SameSite=Lax; Secure";
+                            window.location.replace("{redirect_uri}");
+                            </script>
+                            """,
+                            unsafe_allow_html=True,
                         )
                         st.stop()
 
