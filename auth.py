@@ -4,6 +4,7 @@ import urllib.parse
 import json
 import time
 import base64
+from ipaddress import ip_address, ip_network
 
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -12,6 +13,18 @@ from cryptography.fernet import Fernet, InvalidToken
 from streamlit_cookies_controller import CookieController
 
 COOKIE_NAME = "schedule_auth"
+CS_NETWORKS = [ip_network("128.100.0.0/16")]
+
+
+def _is_cs_network():
+    """Check if the request comes from the UofT CS network/VPN."""
+    forwarded = st.context.headers.get("X-Forwarded-For", "")
+    ip_str = forwarded.split(",")[0].strip() if forwarded else ""
+    try:
+        addr = ip_address(ip_str)
+        return any(addr in net for net in CS_NETWORKS)
+    except ValueError:
+        return False
 
 
 def _get_slack_config():
@@ -103,6 +116,10 @@ def _verify_auth_token(token):
 
 def require_auth():
     """Require Slack authentication. Returns user dict or shows login and stops."""
+    # 0. Skip auth for CS network / VPN users
+    if _is_cs_network():
+        return {"name": "CS Network User", "email": "", "team": "UofT CS"}
+
     controller = CookieController(key="auth_cookies")
 
     # 1. Already authenticated this session
