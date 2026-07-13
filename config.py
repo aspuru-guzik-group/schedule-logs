@@ -34,7 +34,7 @@ GROUPS = {
     "elagente": {
         "display_name": "El Agente Subgroup",
         "short_name": "El Agente",
-        "emoji": "🤖",
+        "emoji": "🎩",
         "num_presenters": 2,
         "meeting_day": "wednesday",
         "presentation_duration": 20,

@@ -162,6 +162,14 @@ You only need to generate this once. Save it somewhere safe (e.g. a password man
 
 Each group's admin logs in via the sidebar password. From there you can manage participants, edit schedules, and update Drive folder IDs / GCP service account JSON.
 
+## Network authentication
+
+Computers on the Matter internal wired network (`10.21.0.0/16`) or UofT CS wired
+network (`128.100.0.0/16`) bypass Slack sign-in. All other client addresses use
+the normal Slack authentication flow. Nginx supplies the trusted client address
+through `X-Real-IP`, and Streamlit is bound to localhost so clients cannot connect
+directly and forge that proxy header.
+
 ## El Agente handoff
 
 El Agente is configured for two 20-minute presenters on Wednesdays. Its Slides

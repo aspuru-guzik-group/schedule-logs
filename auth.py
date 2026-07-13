@@ -4,7 +4,6 @@ import urllib.parse
 import json
 import time
 import base64
-from ipaddress import ip_address, ip_network
 
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -12,19 +11,14 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet, InvalidToken
 from streamlit_cookies_controller import CookieController
 
+from network_access import is_ethernet_client
+
 COOKIE_NAME = "schedule_auth"
-CS_NETWORKS = [ip_network("128.100.0.0/16")]
 
 
-def _is_cs_network():
-    """Check if the request comes from the UofT CS network/VPN."""
-    forwarded = st.context.headers.get("X-Forwarded-For", "")
-    ip_str = forwarded.split(",")[0].strip() if forwarded else ""
-    try:
-        addr = ip_address(ip_str)
-        return any(addr in net for net in CS_NETWORKS)
-    except ValueError:
-        return False
+def _is_ethernet_network():
+    """Check nginx's non-client-controlled address for a trusted wired LAN."""
+    return is_ethernet_client(st.context.headers.get("X-Real-IP", ""))
 
 
 def _get_slack_config():
@@ -116,9 +110,13 @@ def _verify_auth_token(token):
 
 def require_auth():
     """Require Slack authentication. Returns user dict or shows login and stops."""
-    # 0. Skip auth for CS network / VPN users
-    if _is_cs_network():
-        return {"name": "CS Network User", "email": "", "team": "UofT CS"}
+    # 0. Skip auth for computers on the Matter wired network.
+    if _is_ethernet_network():
+        return {
+            "name": "Matter Ethernet User",
+            "email": "",
+            "team": "Matter LAN",
+        }
 
     controller = CookieController(key="auth_cookies")
 
