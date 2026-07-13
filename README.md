@@ -49,7 +49,7 @@ Add these tabs (exact names):
 
 | Tab | Columns |
 |-----|---------|
-| `Schedule` | `Date`, `Presenter` (or `Presenter 1`, `Presenter 2` for ML) |
+| `Schedule` | `Date`, `Presenter` (or `Presenter 1`, `Presenter 2` for two-presenter groups) |
 | `Participants` | `Name`, `Email` |
 | `Materials` | `Date`, `Title`, `Description`, `PDF_Name`, `PDF_Link` |
 | `Slides` | `Date`, `Presentation_ID`, `Presentation_Link` |
@@ -72,7 +72,7 @@ Create a Google Slides presentation to use as a template. Add these placeholders
 
 - `{{DATE}}` — replaced with the meeting date
 - `{{PRESENTER}}` — for 1-presenter groups
-- `{{PRESENTER1}}`, `{{PRESENTER2}}` — for ML (2-presenter) group
+- `{{PRESENTER1}}`, `{{PRESENTER2}}` — for two-presenter groups
 
 Share it with the service account `client_email` as **Viewer**. The `slides_template_id` is in the URL:
 ```
@@ -87,7 +87,7 @@ Each subgroup has its own file in `secrets/`. Copy the example and fill it in:
 cp secrets/group.toml.example secrets/ml.toml   # or quantum.toml, general.toml, etc.
 ```
 
-The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, `[drugdiscovery]`, `[handson]`.
+The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, `[drugdiscovery]`, `[handson]`, `[elagente]`.
 
 The remaining fields:
 
@@ -161,3 +161,32 @@ You only need to generate this once. Save it somewhere safe (e.g. a password man
 ## Admin panel
 
 Each group's admin logs in via the sidebar password. From there you can manage participants, edit schedules, and update Drive folder IDs / GCP service account JSON.
+
+## El Agente handoff
+
+El Agente is configured for two 20-minute presenters on Wednesdays. Its Slides
+template must contain `{{PRESENTER1}}`, `{{PRESENTER2}}`, and `{{DATE}}`.
+
+After creating the Google service account, a blank Sheet, two Drive folders, and
+the Slides template described above, run this on the schedule server:
+
+```bash
+cd ~/schedule-logs
+python3 setup_group.py create elagente
+```
+
+The setup command accepts complete Google URLs, extracts their IDs, generates the
+encryption key, and writes `secrets/elagente.toml` with mode `0600`. It also prints
+the service-account email that must be given access to the four Google resources.
+
+Apply and validate the configuration:
+
+```bash
+docker-compose restart
+docker-compose exec -T schedule python setup_group.py initialize elagente
+```
+
+The initialize command creates the `Schedule`, `Participants`, `Materials`,
+`Slides`, and `Settings` tabs with the expected headers, then verifies access to
+both folders and the Slides template. Until `secrets/elagente.toml` exists, the
+landing page intentionally lists El Agente as **coming soon**.

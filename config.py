@@ -31,6 +31,16 @@ GROUPS = {
         "email_subject": "[Confirmation Required] ML Subgroup",
         "meeting_title": "ML Subgroup Meeting",
     },
+    "elagente": {
+        "display_name": "El Agente Subgroup",
+        "short_name": "El Agente",
+        "emoji": "🤖",
+        "num_presenters": 2,
+        "meeting_day": "wednesday",
+        "presentation_duration": 20,
+        "email_subject": "[Confirmation Required] El Agente Subgroup",
+        "meeting_title": "El Agente Subgroup Meeting",
+    },
     "drugdiscovery": {
         "display_name": "Drug Discovery Subgroup",
         "short_name": "Drug Discovery",
