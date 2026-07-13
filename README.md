@@ -175,10 +175,11 @@ the normal Slack authentication flow. Nginx supplies the trusted client address
 through `X-Real-IP`, and Streamlit is bound to localhost so clients cannot connect
 directly and forge that proxy header.
 
-## El Agente handoff
+## Self-service subgroup setup
 
-El Agente appears as **Admin setup** until its Google resources are valid. The
-admin completes setup entirely in the app by uploading or pasting the service
+El Agente and Hands-on always appear as normal subgroup entries. When either is
+not configured, opening it shows the admin setup screen instead of a schedule.
+The admin completes setup entirely in the app by uploading or pasting the service
 account JSON and entering the Sheet, materials-folder, slides-folder, and Slides
 template URLs. The app extracts IDs, verifies permissions and placeholders, and
 creates the required Sheet tabs before enabling the subgroup.

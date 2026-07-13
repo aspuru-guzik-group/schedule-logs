@@ -98,12 +98,8 @@ if not group_slug or group_slug not in GROUPS:
             configured = gu.is_group_configured(slug)
             self_service_setup = grp.get("self_service_setup", False)
             label = f"{grp['emoji']}  {grp['display_name']}"
-            if not configured:
-                label += (
-                    "  - Admin setup"
-                    if self_service_setup
-                    else "  (coming soon)"
-                )
+            if not configured and not self_service_setup:
+                label += "  (coming soon)"
             if st.button(
                 label,
                 use_container_width=True,

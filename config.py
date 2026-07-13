@@ -63,6 +63,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Hands-on Subgroup",
         "meeting_title": "Hands-on Subgroup Meeting",
+        "self_service_setup": True,
     },
 }
 

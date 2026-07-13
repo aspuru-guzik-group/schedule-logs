@@ -4,11 +4,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from config import get_group_config, get_presenter_cols
+from config import GROUPS, get_group_config, get_presenter_cols
 from runtime_config import save_group_runtime_config
 
 
 class DynamicGroupConfigTest(unittest.TestCase):
+    def test_unconfigured_self_service_groups_keep_normal_landing_entries(self):
+        self.assertTrue(GROUPS["elagente"]["self_service_setup"])
+        self.assertTrue(GROUPS["handson"]["self_service_setup"])
+
     def test_runtime_presenter_mode_and_schedule_settings_override_defaults(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "groups.json"
