@@ -6,7 +6,8 @@ import time
 import funcs as fns
 import google_utils as gu
 import assign_schedule as assign
-from config import GROUPS, get_presenter_cols
+import admin_ui
+from config import GROUPS, get_group_config, get_presenter_cols
 from auth import require_auth
 
 ###############################################
@@ -94,14 +95,19 @@ if not group_slug or group_slug not in GROUPS:
         st.markdown("**Select a subgroup meeting:**")
         st.write("")
         for slug, grp in GROUPS.items():
-            configured = slug in st.secrets
+            configured = gu.is_group_configured(slug)
+            self_service_setup = grp.get("self_service_setup", False)
             label = f"{grp['emoji']}  {grp['display_name']}"
             if not configured:
-                label += "  (coming soon)"
+                label += (
+                    "  - Admin setup"
+                    if self_service_setup
+                    else "  (coming soon)"
+                )
             if st.button(
                 label,
                 use_container_width=True,
-                disabled=not configured,
+                disabled=not configured and not self_service_setup,
                 key=f"group_{slug}",
             ):
                 st.query_params["group"] = slug
@@ -111,24 +117,28 @@ if not group_slug or group_slug not in GROUPS:
 ###############################################
 # GROUP PAGE SETUP
 ###############################################
-group = GROUPS[group_slug]
+group = get_group_config(group_slug)
+group_configured = gu.is_group_configured(group_slug)
 
-if group_slug not in st.secrets:
+if not group_configured and group.get("self_service_setup", False):
+    admin_ui.render_unconfigured_setup_page(group_slug, group)
+    st.stop()
+
+if not group_configured:
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.image("logo.png", width=100)
         st.write("")
         st.warning(
             f"**{group['emoji']} {group['display_name']}** has not been configured yet.\n\n"
-            "The admin for this subgroup needs to create a `secrets/<group>.toml` file "
-            "and redeploy. See the README for instructions."
+            "This subgroup has not been configured yet."
         )
         if st.button("Back to Home", use_container_width=True):
             st.query_params.clear()
             st.rerun()
     st.stop()
 
-group_secrets = st.secrets[group_slug]
+group_connection = gu.get_group_connection_config(group_slug)
 presenter_cols = get_presenter_cols(group)
 
 # Read settings (Sheet overrides > secrets.toml)
@@ -136,7 +146,7 @@ settings = gu.get_group_settings(group_slug)
 FOLDER_ID = settings["folder_id"]
 SLIDES_FOLDER_ID = settings["slides_folder_id"]
 SLIDES_TEMPLATE_ID = settings["slides_template_id"]
-ZOOM_LINK = settings.get("zoom_link", group_secrets.get("zoom_link", ""))
+ZOOM_LINK = settings.get("zoom_link", group_connection.get("zoom_link", ""))
 
 # Header
 top_container = st.container()
@@ -431,11 +441,7 @@ elif "date" in params:
 # SCHEDULE VIEW
 ###############################################
 else:
-    admin_mode = False
-    admin_password = st.sidebar.text_input("Admin password:", type="password")
-    pw = group_secrets["admin_password"]
-    if admin_password == pw:
-        admin_mode = True
+    admin_mode = admin_ui.render_admin_login(group_slug)
 
     try:
         df_full = load_schedule_data(group_slug)
@@ -801,78 +807,77 @@ else:
         st.write("---")
         st.subheader("Admin Settings")
 
-        with st.expander("General"):
-            current_settings = gu.get_group_settings(group_slug)
-            new_organizer = st.text_input(
-                "Organizer Name:",
-                value=current_settings["organizer_name"],
-                key="organizer_input",
-            )
-            if st.button("Save General Settings"):
-                current_settings["organizer_name"] = new_organizer
-                gu.save_group_settings(group_slug, current_settings)
-                st.success("Settings saved!")
+        if group.get("self_service_setup", False):
+            with st.expander("Meeting and Google configuration"):
+                if admin_ui.render_group_configuration_form(
+                    group_slug, group
+                ):
+                    st.rerun()
+        else:
+            with st.expander("General"):
+                current_settings = gu.get_group_settings(group_slug)
+                new_organizer = st.text_input(
+                    "Organizer Name:",
+                    value=current_settings["organizer_name"],
+                    key="organizer_input",
+                )
+                if st.button("Save General Settings"):
+                    current_settings["organizer_name"] = new_organizer
+                    gu.save_group_settings(group_slug, current_settings)
+                    st.success("Settings saved!")
 
-        with st.expander("Google Drive / Slides Configuration"):
-            new_folder_id = st.text_input(
-                "Drive Folder ID:",
-                value=current_settings["folder_id"],
-                key="folder_id_input",
-            )
-            new_slides_folder = st.text_input(
-                "Slides Folder ID:",
-                value=current_settings["slides_folder_id"],
-                key="slides_folder_input",
-            )
-            new_template_id = st.text_input(
-                "Slides Template ID:",
-                value=current_settings["slides_template_id"],
-                key="template_id_input",
-            )
-            new_zoom = st.text_input(
-                "Zoom Link:",
-                value=ZOOM_LINK,
-                key="zoom_link_input",
-            )
-            new_enc_key = st.text_input(
-                "Encryption Key:",
-                value=current_settings.get("encryption_key", ""),
-                key="enc_key_input",
-                type="password",
-            )
+            with st.expander("Google Drive / Slides Configuration"):
+                new_folder_id = st.text_input(
+                    "Drive Folder ID:",
+                    value=current_settings["folder_id"],
+                    key="folder_id_input",
+                )
+                new_slides_folder = st.text_input(
+                    "Slides Folder ID:",
+                    value=current_settings["slides_folder_id"],
+                    key="slides_folder_input",
+                )
+                new_template_id = st.text_input(
+                    "Slides Template ID:",
+                    value=current_settings["slides_template_id"],
+                    key="template_id_input",
+                )
+                new_zoom = st.text_input(
+                    "Zoom Link:",
+                    value=ZOOM_LINK,
+                    key="zoom_link_input",
+                )
 
-            if st.button("Save Integration Settings"):
-                # Merge with existing settings
-                all_settings = gu.get_group_settings(group_slug)
-                all_settings["folder_id"] = new_folder_id
-                all_settings["slides_folder_id"] = new_slides_folder
-                all_settings["slides_template_id"] = new_template_id
-                all_settings["zoom_link"] = new_zoom
-                if new_enc_key:
-                    all_settings["encryption_key"] = new_enc_key
-                gu.save_group_settings(group_slug, all_settings)
-                st.success("Integration settings saved!")
+                if st.button("Save Integration Settings"):
+                    all_settings = gu.get_group_settings(group_slug)
+                    all_settings["folder_id"] = new_folder_id
+                    all_settings["slides_folder_id"] = new_slides_folder
+                    all_settings["slides_template_id"] = new_template_id
+                    all_settings["zoom_link"] = new_zoom
+                    gu.save_group_settings(group_slug, all_settings)
+                    st.success("Integration settings saved!")
 
-        with st.expander("GCP Service Account (JSON)"):
-            st.caption(
-                "Paste your GCP service account JSON here to override the default. "
-                "The private key will be stored encrypted."
-            )
-            gcp_json = st.text_area(
-                "Service Account JSON:",
-                height=200,
-                key="gcp_json_input",
-                placeholder='{"type": "service_account", "project_id": "...", ...}',
-            )
-            if st.button("Save GCP Config"):
-                if gcp_json.strip():
-                    try:
-                        gu.save_gcp_config(group_slug, gcp_json.strip())
-                        st.success("GCP service account saved!")
-                    except ValueError as e:
-                        st.error(str(e))
-                else:
-                    st.warning("Please paste a valid JSON.")
+            with st.expander("Replace GCP service account"):
+                gcp_json = st.text_area(
+                    "Service-account JSON",
+                    height=160,
+                    key="gcp_json_input",
+                    placeholder=(
+                        '{"type": "service_account", "project_id": "...", ...}'
+                    ),
+                )
+                if st.button("Save service account"):
+                    if gcp_json.strip():
+                        try:
+                            gu.save_gcp_config(group_slug, gcp_json.strip())
+                            st.success("GCP service account saved!")
+                        except ValueError as exc:
+                            st.error(str(exc))
+                    else:
+                        st.warning("Paste a valid JSON key")
+
+        with st.expander("Admin password"):
+            admin_ui.render_change_password(group_slug)
 
     st.markdown("""**Activity:** 🟥 Low — 🟨 Avg. — 🟩 High""")
 

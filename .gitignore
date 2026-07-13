@@ -4,3 +4,4 @@ secrets/*.toml
 service_acc.json
 __pycache__/
 schedule.csv
+data/

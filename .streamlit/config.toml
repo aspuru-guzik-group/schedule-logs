@@ -3,5 +3,11 @@ enableCORS = false
 enableXsrfProtection = false
 enableWebsocketCompression = false
 
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
 [theme]
 base = "dark"

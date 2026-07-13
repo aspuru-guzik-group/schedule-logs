@@ -8,9 +8,14 @@ from googleapiclient.http import MediaInMemoryUpload
 from email.mime.text import MIMEText
 import smtplib
 import time
-import json
 
-from funcs import encrypt_name, decrypt_name
+from funcs import encrypt_name
+from group_setup import SERVICE_ACCOUNT_FIELDS, parse_service_account_json
+from runtime_config import (
+    REQUIRED_INTEGRATION_FIELDS,
+    get_group_runtime_config,
+    save_group_runtime_config,
+)
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
@@ -23,9 +28,29 @@ SCOPES = [
 ###############################################################################
 
 
+def get_group_connection_config(group_slug):
+    """Merge legacy file secrets with admin-managed runtime configuration."""
+    legacy = dict(st.secrets.get(group_slug, {}))
+    runtime = get_group_runtime_config(group_slug)
+    merged = {**legacy, **runtime}
+    if "gcp_service_account" in runtime:
+        merged["gcp_service_account"] = dict(runtime["gcp_service_account"])
+    elif "gcp_service_account" in legacy:
+        merged["gcp_service_account"] = dict(legacy["gcp_service_account"])
+    return merged
+
+
+def is_group_configured(group_slug):
+    config = get_group_connection_config(group_slug)
+    if not all(config.get(field) for field in REQUIRED_INTEGRATION_FIELDS):
+        return False
+    service_account = config.get("gcp_service_account", {})
+    return all(service_account.get(field) for field in SERVICE_ACCOUNT_FIELDS)
+
+
 def _get_service_account_info(group_slug):
     """Get GCP service account info for a group. Each group has its own."""
-    return dict(st.secrets[group_slug]["gcp_service_account"])
+    return dict(get_group_connection_config(group_slug)["gcp_service_account"])
 
 
 def get_gspread_client(group_slug):
@@ -38,7 +63,7 @@ def get_gspread_client(group_slug):
 
 def get_sheet(sheet_name, group_slug):
     client = get_gspread_client(group_slug)
-    spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
+    spreadsheet_id = get_group_connection_config(group_slug)["spreadsheet_id"]
     return client.open_by_key(spreadsheet_id).worksheet(sheet_name)
 
 
@@ -237,9 +262,8 @@ def add_slide_entry(date_str, presentation_id, presentation_link, group_slug):
 
 
 def get_group_settings(group_slug):
-    """Get admin-configurable settings. Sheet overrides take precedence over secrets.toml.
-    Note: SMTP email/password are NOT stored here — they are prompted at send time."""
-    group_secrets = st.secrets.get(group_slug, {})
+    """Get settings, with admin-managed runtime values taking precedence."""
+    group_secrets = dict(st.secrets.get(group_slug, {}))
     settings = {
         "smtp_server": group_secrets.get("smtp_server", "smtp.cs.toronto.edu"),
         "smtp_port": int(group_secrets.get("smtp_port", 587)),
@@ -270,16 +294,48 @@ def get_group_settings(group_slug):
             settings["encryption_key"] = overrides["encryption_key"]
     except Exception:
         pass  # Settings sheet doesn't exist yet, use defaults
+
+    runtime = get_group_runtime_config(group_slug)
+    for key in [
+        "smtp_server",
+        "smtp_port",
+        "organizer_name",
+        "folder_id",
+        "slides_folder_id",
+        "slides_template_id",
+        "zoom_link",
+        "encryption_key",
+    ]:
+        if key in runtime and runtime[key] not in (None, ""):
+            settings[key] = runtime[key]
+    settings["smtp_port"] = int(settings["smtp_port"])
     return settings
 
 
 def save_group_settings(group_slug, settings_dict):
-    """Save admin settings to the Settings sheet."""
+    """Save settings locally for runtime groups or to Sheets for legacy groups."""
+    if get_group_runtime_config(group_slug):
+        allowed = {
+            "smtp_server",
+            "smtp_port",
+            "organizer_name",
+            "folder_id",
+            "slides_folder_id",
+            "slides_template_id",
+            "zoom_link",
+            "encryption_key",
+        }
+        save_group_runtime_config(
+            group_slug,
+            {key: value for key, value in settings_dict.items() if key in allowed},
+        )
+        return
+
     try:
         ws = get_sheet("Settings", group_slug)
     except gspread.exceptions.WorksheetNotFound:
         client = get_gspread_client(group_slug)
-        spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
+        spreadsheet_id = get_group_connection_config(group_slug)["spreadsheet_id"]
         spreadsheet = client.open_by_key(spreadsheet_id)
         ws = spreadsheet.add_worksheet(title="Settings", rows=20, cols=2)
 
@@ -291,46 +347,23 @@ def save_group_settings(group_slug, settings_dict):
 
 
 ###############################################################################
-# GCP Service Account Management (stored in group's "GCPConfig" sheet)
+# GCP Service Account Management
 ###############################################################################
 
 
 def get_gcp_config(group_slug):
-    """Get GCP service account config from Sheet override, falling back to secrets.toml."""
-    try:
-        ws = get_sheet("GCPConfig", group_slug)
-        records = ws.get_all_records()
-        config = {str(r["Key"]): str(r["Value"]) for r in records if r.get("Key")}
-        if config:
-            return config
-    except Exception:
-        pass
-    return None
+    """Return the active service account without exposing it in the UI."""
+    config = get_group_connection_config(group_slug)
+    service_account = config.get("gcp_service_account")
+    return dict(service_account) if service_account else None
 
 
 def save_gcp_config(group_slug, gcp_json_str):
-    """Save GCP service account JSON to the GCPConfig sheet (encrypted key fields)."""
-    try:
-        ws = get_sheet("GCPConfig", group_slug)
-    except gspread.exceptions.WorksheetNotFound:
-        client = get_gspread_client(group_slug)
-        spreadsheet_id = st.secrets[group_slug]["spreadsheet_id"]
-        spreadsheet = client.open_by_key(spreadsheet_id)
-        ws = spreadsheet.add_worksheet(title="GCPConfig", rows=20, cols=2)
-
-    try:
-        gcp_data = json.loads(gcp_json_str)
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON for GCP service account")
-
-    data = [["Key", "Value"]]
-    for key, value in gcp_data.items():
-        # Encrypt the private key
-        if key == "private_key":
-            value = encrypt_name(str(value), group_slug)
-        data.append([key, str(value)])
-    ws.clear()
-    ws.update(data)
+    """Validate and save service-account JSON in the protected runtime file."""
+    service_account = parse_service_account_json(gcp_json_str)
+    save_group_runtime_config(
+        group_slug, {"gcp_service_account": service_account}
+    )
 
 
 ###############################################################################

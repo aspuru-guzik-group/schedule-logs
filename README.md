@@ -160,7 +160,12 @@ You only need to generate this once. Save it somewhere safe (e.g. a password man
 
 ## Admin panel
 
-Each group's admin logs in via the sidebar password. From there you can manage participants, edit schedules, and update Drive folder IDs / GCP service account JSON.
+Each group's admin logs in via the sidebar password. From there you can manage
+participants, edit schedules, update integration settings, and change the admin
+password. Admin-managed passwords are stored as PBKDF2 hashes.
+
+The Streamlit toolbar is set to `minimal`, which removes viewer tools including
+the screen-recording option. Streamlit usage telemetry is also disabled.
 
 ## Network authentication
 
@@ -172,29 +177,17 @@ directly and forge that proxy header.
 
 ## El Agente handoff
 
-El Agente is configured for two 20-minute presenters on Wednesdays. Its Slides
-template must contain `{{PRESENTER1}}`, `{{PRESENTER2}}`, and `{{DATE}}`.
+El Agente appears as **Admin setup** until its Google resources are valid. The
+admin completes setup entirely in the app by uploading or pasting the service
+account JSON and entering the Sheet, materials-folder, slides-folder, and Slides
+template URLs. The app extracts IDs, verifies permissions and placeholders, and
+creates the required Sheet tabs before enabling the subgroup.
 
-After creating the Google service account, a blank Sheet, two Drive folders, and
-the Slides template described above, run this on the schedule server:
+Meeting day, presentation duration, organizer, Zoom link, and one/two-presenter
+mode are editable in the same UI. Changing presenter mode creates a timestamped
+backup of the Schedule tab before migrating its columns.
 
-```bash
-cd ~/schedule-logs
-python3 setup_group.py create elagente
-```
-
-The setup command accepts complete Google URLs, extracts their IDs, generates the
-encryption key, and writes `secrets/elagente.toml` with mode `0600`. It also prints
-the service-account email that must be given access to the four Google resources.
-
-Apply and validate the configuration:
-
-```bash
-docker-compose restart
-docker-compose exec -T schedule python setup_group.py initialize elagente
-```
-
-The initialize command creates the `Schedule`, `Participants`, `Materials`,
-`Slides`, and `Settings` tabs with the expected headers, then verifies access to
-both folders and the Slides template. Until `secrets/elagente.toml` exists, the
-landing page intentionally lists El Agente as **coming soon**.
+UI-managed secrets are stored in `data/groups.json` with mode `0600`; the
+directory is mounted read/write only for runtime configuration and is excluded
+from Git and Docker build contexts. The CLI setup command remains available as a
+recovery path.

@@ -5,4 +5,5 @@ services:
       - "127.0.0.1:3000:8501"
     volumes:
       - ./secrets:/app/secrets:ro
+      - ./data:/app/data
     restart: unless-stopped

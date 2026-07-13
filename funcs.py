@@ -8,6 +8,7 @@ import base64
 import streamlit as st
 
 from config import DAY_MAP
+from runtime_config import get_group_runtime_config
 
 
 def get_next_day_of_week(after_date, day_name):
@@ -39,7 +40,8 @@ def highlight_random(val):
 def get_fernet(group_slug=None):
     """Get a Fernet cipher. Uses group-specific encryption key if group_slug provided."""
     if group_slug:
-        encryption_key_str = st.secrets[group_slug]["encryption_key"]
+        runtime_key = get_group_runtime_config(group_slug).get("encryption_key")
+        encryption_key_str = runtime_key or st.secrets[group_slug]["encryption_key"]
     else:
         encryption_key_str = st.secrets["encryption_key"]["value"]
     encryption_key_bytes = encryption_key_str.encode("utf-8")

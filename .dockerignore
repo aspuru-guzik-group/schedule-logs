@@ -6,3 +6,4 @@ old/
 .env
 secrets/
 .streamlit/secrets.toml
+data/

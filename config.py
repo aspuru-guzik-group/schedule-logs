@@ -1,5 +1,7 @@
 """Subgroup meeting configurations."""
 
+from runtime_config import get_group_runtime_config
+
 GROUPS = {
     "general": {
         "display_name": "General Group Meeting",
@@ -40,6 +42,7 @@ GROUPS = {
         "presentation_duration": 20,
         "email_subject": "[Confirmation Required] El Agente Subgroup",
         "meeting_title": "El Agente Subgroup Meeting",
+        "self_service_setup": True,
     },
     "drugdiscovery": {
         "display_name": "Drug Discovery Subgroup",
@@ -72,6 +75,26 @@ DAY_MAP = {
     "saturday": 5,
     "sunday": 6,
 }
+
+
+def get_group_config(group_slug):
+    """Return static group metadata with supported runtime overrides."""
+    group = dict(GROUPS[group_slug])
+    runtime = get_group_runtime_config(group_slug)
+
+    num_presenters = runtime.get("num_presenters")
+    if num_presenters in (1, 2):
+        group["num_presenters"] = num_presenters
+
+    meeting_day = runtime.get("meeting_day")
+    if meeting_day in DAY_MAP:
+        group["meeting_day"] = meeting_day
+
+    presentation_duration = runtime.get("presentation_duration")
+    if isinstance(presentation_duration, int) and presentation_duration > 0:
+        group["presentation_duration"] = presentation_duration
+
+    return group
 
 
 def get_presenter_cols(group):
