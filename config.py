@@ -12,6 +12,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] General Group Meeting",
         "meeting_title": "General Group Meeting",
+        "self_service_setup": True,
     },
     "quantum": {
         "display_name": "Quantum Subgroup",
@@ -22,6 +23,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Quantum Subgroup",
         "meeting_title": "Quantum Subgroup Meeting",
+        "self_service_setup": True,
     },
     "ml": {
         "display_name": "Machine Learning Subgroup",
@@ -32,6 +34,7 @@ GROUPS = {
         "presentation_duration": 20,
         "email_subject": "[Confirmation Required] ML Subgroup",
         "meeting_title": "ML Subgroup Meeting",
+        "self_service_setup": True,
     },
     "elagente": {
         "display_name": "El Agente Subgroup",
@@ -57,6 +60,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Drug Discovery Subgroup",
         "meeting_title": "Drug Discovery Subgroup Meeting",
+        "self_service_setup": True,
     },
     "handson": {
         "display_name": "Hands-on Subgroup",

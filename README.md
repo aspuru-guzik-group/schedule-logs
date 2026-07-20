@@ -177,10 +177,11 @@ directly and forge that proxy header.
 
 ## Self-service subgroup setup
 
-El Agente, Hands-on, and Robotics always appear as normal subgroup entries. When
-one is not configured, opening it shows the admin setup screen instead of a
-schedule. In the default setup path, the admin uploads or pastes a service-account
-JSON key and provides one Drive workspace folder shared with that service account.
+Every subgroup uses the same self-service configuration and always appears as a
+normal subgroup entry. When one is not configured, opening it shows the admin
+setup screen instead of a schedule. In the default setup path, the admin uploads
+or pastes a service-account JSON key and provides one Drive workspace folder
+shared with that service account.
 The app creates the Sheet and required tabs, materials folder, generated-slides
 folder, and a subgroup-specific copy of the ML Slides template before enabling the
 subgroup. A manual path remains available to connect existing resources.

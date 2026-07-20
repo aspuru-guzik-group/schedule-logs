@@ -9,10 +9,10 @@ from runtime_config import save_group_runtime_config
 
 
 class DynamicGroupConfigTest(unittest.TestCase):
-    def test_unconfigured_self_service_groups_keep_normal_landing_entries(self):
-        for slug in ("elagente", "handson", "robotics"):
+    def test_every_group_uses_robust_self_service_configuration(self):
+        for slug, group in GROUPS.items():
             with self.subTest(slug=slug):
-                self.assertTrue(GROUPS[slug]["self_service_setup"])
+                self.assertTrue(group["self_service_setup"])
 
     def test_el_agente_uses_supplied_default_slides_template(self):
         self.assertIn(
