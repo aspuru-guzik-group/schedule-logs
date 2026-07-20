@@ -6,7 +6,12 @@ import streamlit as st
 
 import google_utils as gu
 from config import DAY_MAP
-from group_setup import initialize_google_resources, parse_service_account_json
+from group_setup import (
+    DEFAULT_SLIDES_TEMPLATE_URL,
+    initialize_google_resources,
+    parse_service_account_json,
+    provision_google_resources,
+)
 from runtime_config import (
     get_group_runtime_config,
     save_group_runtime_config,
@@ -63,15 +68,12 @@ def render_setup_checklist():
         """
 1. Create a Google Cloud service account and download its JSON key. Enable the
    Google Sheets, Drive, and Slides APIs.
-2. Create a blank Google Sheet and share it with the service account's
-   `client_email` as **Editor**. The required tabs are created automatically.
-3. Create a Drive folder for materials and another for generated slides. Share
-   both as **Editor** with the service account.
-4. Create a Google Slides template containing `{{DATE}}`. Use `{{PRESENTER}}`
-   in one-presenter mode, or `{{PRESENTER1}}` and `{{PRESENTER2}}` in
-   two-presenter mode. Share it as **Viewer** or **Editor**.
-5. Upload the JSON key and enter the four Google URLs below. Validation must pass
-   before the subgroup becomes available.
+2. Create one empty Google Drive folder. A Shared Drive folder is recommended so
+   subgroup files survive future lead changes.
+3. Share that folder with the JSON key's `client_email` as **Editor** (My Drive)
+   or **Content manager** (Shared Drive).
+4. Upload the JSON key and paste that one folder URL below. The app creates the
+   Sheet, required tabs, materials folder, slides folder, and Slides template.
 """
     )
 
@@ -97,6 +99,17 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         st.caption(
             f"Current service account: `{current_service_account['client_email']}`"
         )
+
+    automatic_setup = False
+    if setup_mode:
+        setup_method = st.segmented_control(
+            "Google resources",
+            options=["Create everything", "Connect existing"],
+            default="Create everything",
+            selection_mode="single",
+            key=f"{group_slug}_setup_method",
+        )
+        automatic_setup = setup_method == "Create everything"
 
     form_key = f"{group_slug}_{'setup' if setup_mode else 'settings'}"
     with st.form(form_key):
@@ -133,22 +146,39 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         )
 
         st.markdown("#### Google resources")
-        spreadsheet_id = st.text_input(
-            "Google Sheet URL or ID",
-            value=str(current.get("spreadsheet_id", "")),
-        )
-        folder_id = st.text_input(
-            "Materials folder URL or ID",
-            value=str(current.get("folder_id", "")),
-        )
-        slides_folder_id = st.text_input(
-            "Slides folder URL or ID",
-            value=str(current.get("slides_folder_id", "")),
-        )
-        slides_template_id = st.text_input(
-            "Slides template URL or ID",
-            value=str(current.get("slides_template_id", "")),
-        )
+        if automatic_setup:
+            workspace_folder = st.text_input(
+                "Workspace folder URL or ID",
+                value=str(current.get("workspace_folder_id", "")),
+            )
+            source_template = st.text_input(
+                "Source Slides template URL or ID (optional)",
+                placeholder=DEFAULT_SLIDES_TEMPLATE_URL,
+                help="Leave blank to copy the Matter Lab ML template.",
+            )
+            spreadsheet_id = ""
+            folder_id = ""
+            slides_folder_id = ""
+            slides_template_id = ""
+        else:
+            workspace_folder = ""
+            source_template = ""
+            spreadsheet_id = st.text_input(
+                "Google Sheet URL or ID",
+                value=str(current.get("spreadsheet_id", "")),
+            )
+            folder_id = st.text_input(
+                "Materials folder URL or ID",
+                value=str(current.get("folder_id", "")),
+            )
+            slides_folder_id = st.text_input(
+                "Slides folder URL or ID",
+                value=str(current.get("slides_folder_id", "")),
+            )
+            slides_template_id = st.text_input(
+                "Slides template URL or ID",
+                value=str(current.get("slides_template_id", "")),
+            )
         uploaded_file = st.file_uploader(
             "Service-account JSON key",
             type=["json"],
@@ -168,9 +198,10 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 value=False,
             )
 
-        submitted = st.form_submit_button(
-            "Validate and save", type="primary"
+        submit_label = (
+            "Create and connect" if automatic_setup else "Validate and save"
         )
+        submitted = st.form_submit_button(submit_label, type="primary")
 
     if not submitted:
         return False
@@ -186,12 +217,6 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         service_account = _service_account_from_form(
             uploaded_file, pasted_json, current
         )
-        values = {
-            "spreadsheet_id": spreadsheet_id,
-            "folder_id": folder_id,
-            "slides_folder_id": slides_folder_id,
-            "slides_template_id": slides_template_id,
-        }
         updated_group = {
             **group,
             "num_presenters": int(num_presenters),
@@ -199,6 +224,22 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             "presentation_duration": int(presentation_duration),
         }
         with st.spinner("Validating Google access and preparing the Sheet..."):
+            provision_messages = []
+            if automatic_setup:
+                values, provision_messages = provision_google_resources(
+                    group_slug,
+                    updated_group,
+                    workspace_folder,
+                    service_account,
+                    source_template=source_template,
+                )
+            else:
+                values = {
+                    "spreadsheet_id": spreadsheet_id,
+                    "folder_id": folder_id,
+                    "slides_folder_id": slides_folder_id,
+                    "slides_template_id": slides_template_id,
+                }
             normalized, messages = initialize_google_resources(
                 updated_group,
                 values,
@@ -222,7 +263,11 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         st.error(f"Setup validation failed: {exc}")
         return False
 
-    st.success("Configuration saved. " + " ".join(f"{item}." for item in messages))
+    all_messages = [*provision_messages, *messages]
+    st.success(
+        "Configuration saved. "
+        + " ".join(f"{item}." for item in all_messages)
+    )
     st.cache_data.clear()
     return True
 

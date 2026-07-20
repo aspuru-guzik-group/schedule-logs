@@ -119,7 +119,12 @@ def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None
         file_metadata["parents"] = [parent_folder_id]
     uploaded_file = (
         drive_service.files()
-        .create(body=file_metadata, media_body=media, fields="id, webViewLink")
+        .create(
+            body=file_metadata,
+            media_body=media,
+            fields="id, webViewLink",
+            supportsAllDrives=True,
+        )
         .execute()
     )
     return uploaded_file.get("id"), uploaded_file.get("webViewLink")
@@ -163,28 +168,24 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
     slides_service = get_slides_service(group_slug)
 
     copy_body = {"name": f"{date} {meeting_title}"}
+    if folder_id:
+        copy_body["parents"] = [folder_id]
     copied_file = (
-        drive_service.files().copy(fileId=template_id, body=copy_body).execute()
+        drive_service.files()
+        .copy(
+            fileId=template_id,
+            body=copy_body,
+            supportsAllDrives=True,
+        )
+        .execute()
     )
     presentation_id = copied_file.get("id")
 
-    if folder_id:
-        file = (
-            drive_service.files()
-            .get(fileId=presentation_id, fields="parents")
-            .execute()
-        )
-        previous_parents = ",".join(file.get("parents"))
-        drive_service.files().update(
-            fileId=presentation_id,
-            addParents=folder_id,
-            removeParents=previous_parents,
-            fields="id, parents",
-        ).execute()
-
     permission_body = {"type": "anyone", "role": "writer"}
     drive_service.permissions().create(
-        fileId=presentation_id, body=permission_body
+        fileId=presentation_id,
+        body=permission_body,
+        supportsAllDrives=True,
     ).execute()
 
     requests = [
@@ -199,14 +200,22 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
     ]
 
     if len(presenters) == 1:
-        requests.append(
-            {
-                "replaceAllText": {
-                    "containsText": {"text": "{{PRESENTER}}", "matchCase": True},
-                    "replaceText": presenters[0],
+        for placeholder, replacement in (
+            ("{{PRESENTER}}", presenters[0]),
+            ("{{PRESENTER1}}", presenters[0]),
+            ("{{PRESENTER2}}", ""),
+        ):
+            requests.append(
+                {
+                    "replaceAllText": {
+                        "containsText": {
+                            "text": placeholder,
+                            "matchCase": True,
+                        },
+                        "replaceText": replacement,
+                    }
                 }
-            }
-        )
+            )
     else:
         for i, presenter in enumerate(presenters):
             requests.append(

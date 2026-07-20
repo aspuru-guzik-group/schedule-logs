@@ -10,6 +10,16 @@ SCOPES = (
     "https://www.googleapis.com/auth/presentations",
     "https://www.googleapis.com/auth/spreadsheets",
 )
+DEFAULT_SLIDES_TEMPLATE_ID = "1XE_EB95lL4YwN1E7J6BgXpGzkTSpyTV021Fexqns4dw"
+DEFAULT_SLIDES_TEMPLATE_URL = (
+    "https://docs.google.com/presentation/d/"
+    f"{DEFAULT_SLIDES_TEMPLATE_ID}/edit"
+)
+FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+SPREADSHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet"
+PRESENTATION_MIME_TYPE = "application/vnd.google-apps.presentation"
+MANAGED_PROPERTY_GROUP = "matterScheduleGroup"
+MANAGED_PROPERTY_ROLE = "matterScheduleRole"
 SERVICE_ACCOUNT_FIELDS = (
     "type",
     "project_id",
@@ -102,6 +112,18 @@ def required_slide_placeholders(num_presenters):
     return placeholders
 
 
+def missing_slide_placeholders(template_text, num_presenters):
+    """Return missing tokens, accepting the two-presenter deck for one speaker."""
+    required = required_slide_placeholders(num_presenters)
+    if (
+        num_presenters == 1
+        and "{{PRESENTER}}" not in template_text
+        and "{{PRESENTER1}}" in template_text
+    ):
+        required.remove("{{PRESENTER}}")
+    return sorted(token for token in required if token not in template_text)
+
+
 def _presentation_text(presentation):
     chunks = []
 
@@ -162,6 +184,194 @@ def _migrate_schedule(spreadsheet, worksheet, expected_headers):
     return backup_title
 
 
+def _drive_query_literal(value):
+    return str(value).replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _find_managed_resource(drive, parent_id, group_slug, role, drive_id=None):
+    query = (
+        f"'{_drive_query_literal(parent_id)}' in parents and trashed = false and "
+        "properties has { key='"
+        f"{MANAGED_PROPERTY_GROUP}' and value='"
+        f"{_drive_query_literal(group_slug)}' }} and properties has {{ key='"
+        f"{MANAGED_PROPERTY_ROLE}' and value='{_drive_query_literal(role)}' }}"
+    )
+    list_args = {
+        "q": query,
+        "fields": "files(id,name,mimeType)",
+        "spaces": "drive",
+        "pageSize": 10,
+        "supportsAllDrives": True,
+        "includeItemsFromAllDrives": True,
+    }
+    if drive_id:
+        list_args.update({"corpora": "drive", "driveId": drive_id})
+    else:
+        list_args["corpora"] = "user"
+    return drive.files().list(**list_args).execute().get("files", [])
+
+
+def _get_or_create_managed_resource(
+    drive,
+    parent_id,
+    group_slug,
+    role,
+    name,
+    mime_type,
+    drive_id=None,
+    copy_source_id=None,
+):
+    existing = _find_managed_resource(
+        drive, parent_id, group_slug, role, drive_id
+    )
+    for resource in existing:
+        if resource.get("mimeType") == mime_type:
+            return resource, False
+
+    body = {
+        "name": name,
+        "parents": [parent_id],
+        "properties": {
+            MANAGED_PROPERTY_GROUP: group_slug,
+            MANAGED_PROPERTY_ROLE: role,
+        },
+    }
+    if copy_source_id:
+        request = drive.files().copy(
+            fileId=copy_source_id,
+            body=body,
+            fields="id,name,mimeType",
+            supportsAllDrives=True,
+        )
+    else:
+        body["mimeType"] = mime_type
+        request = drive.files().create(
+            body=body,
+            fields="id,name,mimeType",
+            supportsAllDrives=True,
+        )
+    return request.execute(), True
+
+
+def provision_google_resources(
+    group_slug,
+    group_config,
+    workspace_folder,
+    service_account,
+    source_template="",
+    _drive=None,
+):
+    """Create or reuse all subgroup resources inside one Drive folder."""
+    service_account = validate_service_account(service_account)
+    workspace_folder_id = extract_resource_id(workspace_folder, "folder")
+
+    if _drive is None:
+        try:
+            from google.oauth2.service_account import Credentials
+            from googleapiclient.discovery import build
+        except ImportError as exc:
+            raise RuntimeError("Google API dependencies are unavailable") from exc
+        credentials = Credentials.from_service_account_info(
+            service_account, scopes=SCOPES
+        )
+        drive = build("drive", "v3", credentials=credentials)
+    else:
+        drive = _drive
+
+    workspace = (
+        drive.files()
+        .get(
+            fileId=workspace_folder_id,
+            fields=(
+                "id,name,mimeType,trashed,driveId,"
+                "capabilities(canAddChildren)"
+            ),
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    if workspace.get("trashed"):
+        raise ValueError("The workspace folder is in the trash")
+    if workspace.get("mimeType") != FOLDER_MIME_TYPE:
+        raise ValueError("The workspace location must be a Google Drive folder")
+    if not workspace.get("capabilities", {}).get("canAddChildren"):
+        raise ValueError(
+            "The service account needs Editor or Content manager access to "
+            f"the workspace folder: {workspace.get('name', workspace_folder_id)}"
+        )
+
+    source_template_id = (
+        extract_resource_id(source_template, "presentation")
+        if str(source_template).strip()
+        else DEFAULT_SLIDES_TEMPLATE_ID
+    )
+    source = (
+        drive.files()
+        .get(
+            fileId=source_template_id,
+            fields="id,name,mimeType,trashed,capabilities(canCopy)",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    if source.get("trashed") or source.get("mimeType") != PRESENTATION_MIME_TYPE:
+        raise ValueError("The source Slides template is unavailable or invalid")
+    if not source.get("capabilities", {}).get("canCopy"):
+        raise ValueError("The service account cannot copy the source Slides template")
+
+    display_name = group_config["display_name"]
+    drive_id = workspace.get("driveId")
+    specifications = (
+        (
+            "folder_id",
+            "materials",
+            f"{display_name} Materials",
+            FOLDER_MIME_TYPE,
+            None,
+        ),
+        (
+            "slides_folder_id",
+            "generated_slides",
+            f"{display_name} Generated Slides",
+            FOLDER_MIME_TYPE,
+            None,
+        ),
+        (
+            "spreadsheet_id",
+            "schedule",
+            f"{display_name} Schedule",
+            SPREADSHEET_MIME_TYPE,
+            None,
+        ),
+        (
+            "slides_template_id",
+            "slides_template",
+            f"{display_name} Slides Template",
+            PRESENTATION_MIME_TYPE,
+            source_template_id,
+        ),
+    )
+
+    values = {"workspace_folder_id": workspace_folder_id}
+    messages = [f"Verified workspace folder: {workspace['name']}"]
+    for key, role, name, mime_type, copy_source_id in specifications:
+        resource, created = _get_or_create_managed_resource(
+            drive,
+            workspace_folder_id,
+            group_slug,
+            role,
+            name,
+            mime_type,
+            drive_id=drive_id,
+            copy_source_id=copy_source_id,
+        )
+        values[key] = resource["id"]
+        action = "Created" if created else "Reused"
+        messages.append(f"{action} {resource['name']}")
+
+    return values, messages
+
+
 def initialize_google_resources(
     group_config,
     values,
@@ -191,19 +401,19 @@ def initialize_google_resources(
         (
             "materials folder",
             values["folder_id"],
-            "application/vnd.google-apps.folder",
+            FOLDER_MIME_TYPE,
             "canAddChildren",
         ),
         (
             "slides folder",
             values["slides_folder_id"],
-            "application/vnd.google-apps.folder",
+            FOLDER_MIME_TYPE,
             "canAddChildren",
         ),
         (
             "slides template",
             values["slides_template_id"],
-            "application/vnd.google-apps.presentation",
+            PRESENTATION_MIME_TYPE,
             "canCopy",
         ),
     )
@@ -216,6 +426,7 @@ def initialize_google_resources(
                     "id,name,mimeType,trashed,"
                     "capabilities(canAddChildren,canCopy,canEdit)"
                 ),
+                supportsAllDrives=True,
             )
             .execute()
         )
@@ -239,14 +450,9 @@ def initialize_google_resources(
         .get(presentationId=values["slides_template_id"])
         .execute()
     )
-    required_placeholders = required_slide_placeholders(
-        group_config["num_presenters"]
-    )
     template_text = _presentation_text(presentation)
-    missing_placeholders = sorted(
-        placeholder
-        for placeholder in required_placeholders
-        if placeholder not in template_text
+    missing_placeholders = missing_slide_placeholders(
+        template_text, group_config["num_presenters"]
     )
     if missing_placeholders:
         raise ValueError(

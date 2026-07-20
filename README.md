@@ -179,10 +179,17 @@ directly and forge that proxy header.
 
 El Agente, Hands-on, and Robotics always appear as normal subgroup entries. When
 one is not configured, opening it shows the admin setup screen instead of a
-schedule. The admin completes setup entirely in the app by uploading or pasting
-the service account JSON and entering the Sheet, materials-folder, slides-folder,
-and Slides template URLs. The app extracts IDs, verifies permissions and
-placeholders, and creates the required Sheet tabs before enabling the subgroup.
+schedule. In the default setup path, the admin uploads or pastes a service-account
+JSON key and provides one Drive workspace folder shared with that service account.
+The app creates the Sheet and required tabs, materials folder, generated-slides
+folder, and a subgroup-specific copy of the ML Slides template before enabling the
+subgroup. A manual path remains available to connect existing resources.
+
+Use a Shared Drive workspace folder when possible. The Shared Drive owns its
+files, so they remain available when a subgroup lead or service account changes.
+For a handover, grant the new service account access to the existing workspace
+folder, then upload its JSON key in the subgroup's admin settings; the stored
+resource IDs do not need to change.
 
 Meeting day, presentation duration, organizer, Zoom link, and one/two-presenter
 mode are editable in the same UI. Changing presenter mode creates a timestamped
