@@ -22,6 +22,10 @@ MANAGED_PROPERTY_GROUP = "matterScheduleGroup"
 MANAGED_PROPERTY_ROLE = "matterScheduleRole"
 CLOUD_KEY_BEGIN_MARKER = "---BEGIN JSON---"
 CLOUD_KEY_END_MARKER = "---END JSON---"
+SHARED_DRIVE_REQUIRED_MESSAGE = (
+    "Google service accounts have no Drive storage. Use a folder inside a "
+    "Shared Drive and grant the service account Content manager access."
+)
 SERVICE_ACCOUNT_FIELDS = (
     "type",
     "project_id",
@@ -211,6 +215,39 @@ def _drive_query_literal(value):
     return str(value).replace("\\", "\\\\").replace("'", "\\'")
 
 
+def _require_shared_drive_folder(metadata, label):
+    if not metadata.get("driveId"):
+        raise ValueError(
+            f"The {label} is in My Drive. {SHARED_DRIVE_REQUIRED_MESSAGE}"
+        )
+
+
+def _get_workspace_folder(drive, workspace_folder_id):
+    workspace = (
+        drive.files()
+        .get(
+            fileId=workspace_folder_id,
+            fields=(
+                "id,name,mimeType,trashed,driveId,"
+                "capabilities(canAddChildren)"
+            ),
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    if workspace.get("trashed"):
+        raise ValueError("The workspace folder is in the trash")
+    if workspace.get("mimeType") != FOLDER_MIME_TYPE:
+        raise ValueError("The workspace location must be a Google Drive folder")
+    _require_shared_drive_folder(workspace, "workspace folder")
+    if not workspace.get("capabilities", {}).get("canAddChildren"):
+        raise ValueError(
+            "The service account needs Content manager access to the "
+            f"workspace folder: {workspace.get('name', workspace_folder_id)}"
+        )
+    return workspace
+
+
 def _find_managed_resource(drive, parent_id, group_slug, role, drive_id=None):
     query = (
         f"'{_drive_query_literal(parent_id)}' in parents and trashed = false and "
@@ -301,27 +338,7 @@ def provision_google_resources(
     else:
         drive = _drive
 
-    workspace = (
-        drive.files()
-        .get(
-            fileId=workspace_folder_id,
-            fields=(
-                "id,name,mimeType,trashed,driveId,"
-                "capabilities(canAddChildren)"
-            ),
-            supportsAllDrives=True,
-        )
-        .execute()
-    )
-    if workspace.get("trashed"):
-        raise ValueError("The workspace folder is in the trash")
-    if workspace.get("mimeType") != FOLDER_MIME_TYPE:
-        raise ValueError("The workspace location must be a Google Drive folder")
-    if not workspace.get("capabilities", {}).get("canAddChildren"):
-        raise ValueError(
-            "The service account needs Editor or Content manager access to "
-            f"the workspace folder: {workspace.get('name', workspace_folder_id)}"
-        )
+    workspace = _get_workspace_folder(drive, workspace_folder_id)
 
     source_template_id = (
         extract_resource_id(source_template, "presentation")
@@ -395,6 +412,62 @@ def provision_google_resources(
     return values, messages
 
 
+def provision_google_storage_folders(
+    group_slug,
+    group_config,
+    workspace_folder,
+    service_account,
+    _drive=None,
+):
+    """Create or reuse writable Materials and Slides folders in a Shared Drive."""
+    service_account = validate_service_account(service_account)
+    workspace_folder_id = extract_resource_id(workspace_folder, "folder")
+
+    if _drive is None:
+        try:
+            from google.oauth2.service_account import Credentials
+            from googleapiclient.discovery import build
+        except ImportError as exc:
+            raise RuntimeError("Google API dependencies are unavailable") from exc
+        credentials = Credentials.from_service_account_info(
+            service_account, scopes=SCOPES
+        )
+        drive = build("drive", "v3", credentials=credentials)
+    else:
+        drive = _drive
+
+    workspace = _get_workspace_folder(drive, workspace_folder_id)
+    display_name = group_config["display_name"]
+    specifications = (
+        (
+            "folder_id",
+            "materials",
+            f"{display_name} Materials",
+        ),
+        (
+            "slides_folder_id",
+            "generated_slides",
+            f"{display_name} Generated Slides",
+        ),
+    )
+    values = {"workspace_folder_id": workspace_folder_id}
+    messages = [f"Verified Shared Drive workspace: {workspace['name']}"]
+    for key, role, name in specifications:
+        resource, created = _get_or_create_managed_resource(
+            drive,
+            workspace_folder_id,
+            group_slug,
+            role,
+            name,
+            FOLDER_MIME_TYPE,
+            drive_id=workspace["driveId"],
+        )
+        values[key] = resource["id"]
+        action = "Created" if created else "Reused"
+        messages.append(f"{action} {resource['name']}")
+    return values, messages
+
+
 def initialize_google_resources(
     group_config,
     values,
@@ -446,7 +519,7 @@ def initialize_google_resources(
             .get(
                 fileId=resource_id,
                 fields=(
-                    "id,name,mimeType,trashed,"
+                    "id,name,mimeType,trashed,driveId,"
                     "capabilities(canAddChildren,canCopy,canEdit)"
                 ),
                 supportsAllDrives=True,
@@ -460,6 +533,8 @@ def initialize_google_resources(
                 f"The {label} has type {metadata.get('mimeType')}; "
                 f"expected {expected_mime_type}"
             )
+        if label in ("materials folder", "slides folder"):
+            _require_shared_drive_folder(metadata, label)
         if not metadata.get("capabilities", {}).get(required_capability):
             raise ValueError(
                 f"The service account lacks {required_capability} access to "

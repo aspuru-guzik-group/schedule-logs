@@ -1,9 +1,11 @@
 import streamlit as st
 import datetime as dt
+import json
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaInMemoryUpload
 from email.mime.text import MIMEText
 import smtplib
@@ -22,6 +24,49 @@ SCOPES = [
     "https://www.googleapis.com/auth/presentations",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
+DRIVE_STORAGE_CONFIGURATION_MESSAGE = (
+    "Google service accounts cannot create files in My Drive. Open Admin "
+    "Settings > Meeting and Google configuration, paste a folder from Shared "
+    "drives into Shared Drive workspace, and save."
+)
+
+
+class DriveStorageConfigurationError(RuntimeError):
+    pass
+
+
+def _google_http_error_details(exc):
+    try:
+        content = (
+            exc.content.decode("utf-8")
+            if isinstance(exc.content, bytes)
+            else exc.content
+        )
+        error = json.loads(content).get("error", {})
+        reasons = {
+            item.get("reason")
+            for item in error.get("errors", [])
+            if item.get("reason")
+        }
+        return reasons, error.get("message", "Google API request failed")
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return set(), "Google API request failed"
+
+
+def google_http_error_message(exc):
+    return _google_http_error_details(exc)[1]
+
+
+def _execute_drive_write(request):
+    try:
+        return request.execute()
+    except HttpError as exc:
+        reasons, _ = _google_http_error_details(exc)
+        if "storageQuotaExceeded" in reasons:
+            raise DriveStorageConfigurationError(
+                DRIVE_STORAGE_CONFIGURATION_MESSAGE
+            ) from exc
+        raise
 
 ###############################################################################
 # Google Sheets & Drive Utilities
@@ -117,7 +162,7 @@ def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None
     file_metadata = {"name": file_name}
     if parent_folder_id:
         file_metadata["parents"] = [parent_folder_id]
-    uploaded_file = (
+    upload_request = (
         drive_service.files()
         .create(
             body=file_metadata,
@@ -125,8 +170,8 @@ def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None
             fields="id, webViewLink",
             supportsAllDrives=True,
         )
-        .execute()
     )
+    uploaded_file = _execute_drive_write(upload_request)
     return uploaded_file.get("id"), uploaded_file.get("webViewLink")
 
 
@@ -170,23 +215,16 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
     copy_body = {"name": f"{date} {meeting_title}"}
     if folder_id:
         copy_body["parents"] = [folder_id]
-    copied_file = (
+    copy_request = (
         drive_service.files()
         .copy(
             fileId=template_id,
             body=copy_body,
             supportsAllDrives=True,
         )
-        .execute()
     )
+    copied_file = _execute_drive_write(copy_request)
     presentation_id = copied_file.get("id")
-
-    permission_body = {"type": "anyone", "role": "writer"}
-    drive_service.permissions().create(
-        fileId=presentation_id,
-        body=permission_body,
-        supportsAllDrives=True,
-    ).execute()
 
     requests = [
         {

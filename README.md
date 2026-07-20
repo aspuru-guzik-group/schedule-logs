@@ -54,9 +54,10 @@ Add these tabs (exact names):
 | `Materials` | `Date`, `Title`, `Description`, `PDF_Name`, `PDF_Link` |
 | `Slides` | `Date`, `Presentation_ID`, `Presentation_Link` |
 
-### 3. Create Google Drive folders
+### 3. Create Shared Drive folders
 
-Create two folders in Google Drive and share both with the service account `client_email` as **Editor**:
+Create two folders inside a Google Shared Drive and grant the service account
+`client_email` **Content manager** access:
 
 - **Materials folder** — for uploaded PDFs → this is `folder_id`
 - **Slides folder** — for generated slide decks → this is `slides_folder_id`
@@ -197,8 +198,10 @@ Failed validation and application deployments therefore preserve the key, URLs,
 meeting settings, and selected setup mode for the next retry. The draft does not
 enable the subgroup and is cleared after validation succeeds.
 
-Use a Shared Drive workspace folder when possible. The Shared Drive owns its
-files, so they remain available when a subgroup lead or service account changes.
+Use a Shared Drive workspace folder. Service accounts have no Drive storage and
+cannot create generated Slides or uploaded PDFs in My Drive. The Shared Drive
+owns its files, so they also remain available when a subgroup lead or service
+account changes. Generated files inherit the Shared Drive's access settings.
 For a handover, grant the new service account access to the existing workspace
 folder, then upload its JSON key in the subgroup's admin settings; the stored
 resource IDs do not need to change.

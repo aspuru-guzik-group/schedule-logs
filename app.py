@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import time
+from googleapiclient.errors import HttpError
 
 import funcs as fns
 import google_utils as gu
@@ -343,31 +344,37 @@ elif "date" in params:
         else:
             if ps and st.button("Make Slides", key=f"main_slides_{idx}"):
                 try:
-                    from googleapiclient.errors import HttpError
-
                     drive_service = gu.get_drive_service(group_slug)
-                    drive_service.files().get(fileId=SLIDES_TEMPLATE_ID).execute()
-                except HttpError as e:
-                    st.error(f"Template file not found or access denied: {e}")
-
-                presentation_id, presentation_link = gu.generate_presentation(
-                    selected_date_str,
-                    ps,
-                    SLIDES_TEMPLATE_ID,
-                    folder_id=SLIDES_FOLDER_ID,
-                    meeting_title=group["meeting_title"],
-                    group_slug=group_slug,
-                )
-                if presentation_id and presentation_link:
-                    gu.add_slide_entry(
+                    drive_service.files().get(
+                        fileId=SLIDES_TEMPLATE_ID,
+                        supportsAllDrives=True,
+                    ).execute()
+                    presentation_id, presentation_link = gu.generate_presentation(
                         selected_date_str,
-                        presentation_id,
-                        presentation_link,
-                        group_slug,
+                        ps,
+                        SLIDES_TEMPLATE_ID,
+                        folder_id=SLIDES_FOLDER_ID,
+                        meeting_title=group["meeting_title"],
+                        group_slug=group_slug,
                     )
-                    st.success("Slides generated successfully.")
-                    load_slides_data.clear()
-                    st.rerun()
+                except gu.DriveStorageConfigurationError as exc:
+                    st.error(str(exc))
+                except HttpError as exc:
+                    st.error(
+                        "Could not create slides: "
+                        + gu.google_http_error_message(exc)
+                    )
+                else:
+                    if presentation_id and presentation_link:
+                        gu.add_slide_entry(
+                            selected_date_str,
+                            presentation_id,
+                            presentation_link,
+                            group_slug,
+                        )
+                        st.success("Slides generated successfully.")
+                        load_slides_data.clear()
+                        st.rerun()
 
     with col2:
         if ZOOM_LINK:
@@ -411,29 +418,38 @@ elif "date" in params:
             if not new_title.strip():
                 st.warning("Please enter a valid document title/link.")
             else:
-                pdf_name = ""
-                drive_link = ""
-                if pdf_file is not None:
-                    pdf_bytes = pdf_file.read()
-                    pdf_name = pdf_file.name
-                    _, drive_link = gu.upload_file_to_drive(
+                try:
+                    pdf_name = ""
+                    drive_link = ""
+                    if pdf_file is not None:
+                        pdf_bytes = pdf_file.read()
+                        pdf_name = pdf_file.name
+                        _, drive_link = gu.upload_file_to_drive(
+                            pdf_name,
+                            pdf_bytes,
+                            "application/pdf",
+                            parent_folder_id=FOLDER_ID,
+                            group_slug=group_slug,
+                        )
+                    gu.add_material(
+                        selected_date_str,
+                        new_title.strip(),
+                        new_description.strip(),
                         pdf_name,
-                        pdf_bytes,
-                        "application/pdf",
-                        parent_folder_id=FOLDER_ID,
-                        group_slug=group_slug,
+                        drive_link,
+                        group_slug,
                     )
-                gu.add_material(
-                    selected_date_str,
-                    new_title.strip(),
-                    new_description.strip(),
-                    pdf_name,
-                    drive_link,
-                    group_slug,
-                )
-                refresh_detail()
-                st.success("Material added successfully.")
-                st.rerun()
+                except gu.DriveStorageConfigurationError as exc:
+                    st.error(str(exc))
+                except HttpError as exc:
+                    st.error(
+                        "Could not upload the document: "
+                        + gu.google_http_error_message(exc)
+                    )
+                else:
+                    refresh_detail()
+                    st.success("Material added successfully.")
+                    st.rerun()
 
     st.write("---")
     if st.button("Back to Schedule"):

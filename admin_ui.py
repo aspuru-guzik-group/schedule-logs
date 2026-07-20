@@ -11,6 +11,7 @@ from group_setup import (
     initialize_google_resources,
     parse_service_account_json,
     provision_google_resources,
+    provision_google_storage_folders,
     should_migrate_schedule,
 )
 from runtime_config import (
@@ -22,7 +23,7 @@ from runtime_config import (
 
 
 CLOUD_SHELL_URL = "https://shell.cloud.google.com/?show=terminal"
-GOOGLE_DRIVE_URL = "https://drive.google.com/drive/u/0/my-drive"
+GOOGLE_DRIVE_URL = "https://drive.google.com/drive/u/0/shared-drives"
 CLOUD_SETUP_COMMAND = (
     "bash <(curl -fsSL https://raw.githubusercontent.com/"
     "aspuru-guzik-group/schedule-logs/main/scripts/create_google_key.sh)"
@@ -73,7 +74,7 @@ def render_admin_login(group_slug, container=None, key_prefix="sidebar"):
 
 def render_setup_checklist():
     st.info(
-        "You only need a Google key and one Drive workspace. "
+        "You only need a Google key and one Shared Drive workspace. "
         "The app creates and connects everything else."
     )
 
@@ -180,9 +181,9 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
     if pending_service_account is None and setup_draft:
         pending_service_account = current_service_account
     if automatic_setup:
-        st.markdown("#### 2. Drive workspace")
+        st.markdown("#### 2. Shared Drive workspace")
         st.link_button(
-            "Open Google Drive",
+            "Open Shared Drives",
             GOOGLE_DRIVE_URL,
             width="stretch",
         )
@@ -266,7 +267,14 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             slides_folder_id = ""
             slides_template_id = ""
         else:
-            workspace_folder = ""
+            workspace_folder = st.text_input(
+                "Shared Drive workspace URL or ID (optional)",
+                value=str(current.get("workspace_folder_id", "")),
+                help=(
+                    "When provided, the app creates and uses writable Materials "
+                    "and Slides folders here. This replaces the two folder IDs below."
+                ),
+            )
             source_template = ""
             spreadsheet_id = st.text_input(
                 "Google Sheet URL or ID",
@@ -359,6 +367,17 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                     "slides_folder_id": slides_folder_id,
                     "slides_template_id": slides_template_id,
                 }
+                if workspace_folder.strip():
+                    storage_values, storage_messages = (
+                        provision_google_storage_folders(
+                            group_slug,
+                            updated_group,
+                            workspace_folder,
+                            service_account,
+                        )
+                    )
+                    values.update(storage_values)
+                    provision_messages.extend(storage_messages)
             normalized, messages = initialize_google_resources(
                 updated_group,
                 values,

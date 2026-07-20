@@ -8,8 +8,10 @@ from group_setup import (
     SPREADSHEET_MIME_TYPE,
     _headers_match_ignoring_whitespace,
     _migrate_schedule,
+    _require_shared_drive_folder,
     missing_slide_placeholders,
     provision_google_resources,
+    provision_google_storage_folders,
     required_slide_placeholders,
     parse_service_account_json,
     should_migrate_schedule,
@@ -41,9 +43,10 @@ class FakeRequest:
 
 
 class FakeDriveFiles:
-    def __init__(self):
+    def __init__(self, workspace_drive_id="shared_drive_12345"):
         self.resources = []
         self.copied_from = []
+        self.workspace_drive_id = workspace_drive_id
 
     def get(self, *, fileId, **_kwargs):
         if fileId == "workspace_folder_12345":
@@ -52,6 +55,7 @@ class FakeDriveFiles:
                     "id": fileId,
                     "name": "Robotics Workspace",
                     "mimeType": FOLDER_MIME_TYPE,
+                    "driveId": self.workspace_drive_id,
                     "capabilities": {"canAddChildren": True},
                 }
             )
@@ -91,8 +95,8 @@ class FakeDriveFiles:
 
 
 class FakeDrive:
-    def __init__(self):
-        self.files_api = FakeDriveFiles()
+    def __init__(self, workspace_drive_id="shared_drive_12345"):
+        self.files_api = FakeDriveFiles(workspace_drive_id)
 
     def files(self):
         return self.files_api
@@ -128,6 +132,24 @@ class FakeSpreadsheet:
 
 
 class GroupSetupTest(unittest.TestCase):
+    def test_my_drive_workspace_is_rejected_before_file_creation(self):
+        drive = FakeDrive(workspace_drive_id=None)
+
+        with self.assertRaisesRegex(ValueError, "Shared Drive"):
+            provision_google_resources(
+                "robotics",
+                GROUPS["robotics"],
+                "workspace_folder_12345",
+                service_account_fixture(),
+                _drive=drive,
+            )
+
+        self.assertEqual(drive.files_api.resources, [])
+
+    def test_writable_destinations_must_be_in_a_shared_drive(self):
+        with self.assertRaisesRegex(ValueError, "materials folder.*My Drive"):
+            _require_shared_drive_folder({}, "materials folder")
+
     def test_headers_allow_only_surrounding_whitespace_repair(self):
         expected = ["Date", "Title", "Description", "PDF_Name", "PDF_Link"]
 
@@ -208,6 +230,25 @@ class GroupSetupTest(unittest.TestCase):
             sum(message.startswith("Reused ") for message in repeated_messages),
             4,
         )
+
+    def test_storage_repair_creates_only_writable_folders(self):
+        drive = FakeDrive()
+
+        values, messages = provision_google_storage_folders(
+            "robotics",
+            GROUPS["robotics"],
+            "workspace_folder_12345",
+            service_account_fixture(),
+            _drive=drive,
+        )
+
+        self.assertEqual(values["workspace_folder_id"], "workspace_folder_12345")
+        self.assertEqual(len(drive.files_api.resources), 2)
+        self.assertEqual(
+            set(values),
+            {"workspace_folder_id", "folder_id", "slides_folder_id"},
+        )
+        self.assertTrue(messages[0].startswith("Verified Shared Drive"))
 
     def test_one_to_two_presenter_migration_keeps_existing_presenter(self):
         spreadsheet = FakeSpreadsheet()
