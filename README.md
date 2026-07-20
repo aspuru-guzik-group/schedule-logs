@@ -87,7 +87,7 @@ Each subgroup has its own file in `secrets/`. Copy the example and fill it in:
 cp secrets/group.toml.example secrets/ml.toml   # or quantum.toml, general.toml, etc.
 ```
 
-The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, `[drugdiscovery]`, `[handson]`, `[elagente]`.
+The `[section]` name must match the filename: `[ml]`, `[quantum]`, `[general]`, `[drugdiscovery]`, `[handson]`, `[elagente]`, `[robotics]`.
 
 The remaining fields:
 
@@ -177,12 +177,12 @@ directly and forge that proxy header.
 
 ## Self-service subgroup setup
 
-El Agente and Hands-on always appear as normal subgroup entries. When either is
-not configured, opening it shows the admin setup screen instead of a schedule.
-The admin completes setup entirely in the app by uploading or pasting the service
-account JSON and entering the Sheet, materials-folder, slides-folder, and Slides
-template URLs. The app extracts IDs, verifies permissions and placeholders, and
-creates the required Sheet tabs before enabling the subgroup.
+El Agente, Hands-on, and Robotics always appear as normal subgroup entries. When
+one is not configured, opening it shows the admin setup screen instead of a
+schedule. The admin completes setup entirely in the app by uploading or pasting
+the service account JSON and entering the Sheet, materials-folder, slides-folder,
+and Slides template URLs. The app extracts IDs, verifies permissions and
+placeholders, and creates the required Sheet tabs before enabling the subgroup.
 
 Meeting day, presentation duration, organizer, Zoom link, and one/two-presenter
 mode are editable in the same UI. Changing presenter mode creates a timestamped

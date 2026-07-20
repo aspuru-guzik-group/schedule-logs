@@ -65,6 +65,17 @@ GROUPS = {
         "meeting_title": "Hands-on Subgroup Meeting",
         "self_service_setup": True,
     },
+    "robotics": {
+        "display_name": "Robotics Subgroup",
+        "short_name": "Robotics",
+        "emoji": "🤖",
+        "num_presenters": 1,
+        "meeting_day": "wednesday",
+        "presentation_duration": 50,
+        "email_subject": "[Confirmation Required] Robotics Subgroup",
+        "meeting_title": "Robotics Subgroup Meeting",
+        "self_service_setup": True,
+    },
 }
 
 DAY_MAP = {

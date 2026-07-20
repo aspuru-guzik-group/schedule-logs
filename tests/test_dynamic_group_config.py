@@ -10,8 +10,16 @@ from runtime_config import save_group_runtime_config
 
 class DynamicGroupConfigTest(unittest.TestCase):
     def test_unconfigured_self_service_groups_keep_normal_landing_entries(self):
-        self.assertTrue(GROUPS["elagente"]["self_service_setup"])
-        self.assertTrue(GROUPS["handson"]["self_service_setup"])
+        for slug in ("elagente", "handson", "robotics"):
+            with self.subTest(slug=slug):
+                self.assertTrue(GROUPS[slug]["self_service_setup"])
+
+    def test_robotics_group_uses_robot_face_and_editable_presenter_default(self):
+        robotics = GROUPS["robotics"]
+
+        self.assertEqual(robotics["display_name"], "Robotics Subgroup")
+        self.assertEqual(robotics["emoji"], "🤖")
+        self.assertEqual(robotics["num_presenters"], 1)
 
     def test_runtime_presenter_mode_and_schedule_settings_override_defaults(self):
         with tempfile.TemporaryDirectory() as temp_dir:
