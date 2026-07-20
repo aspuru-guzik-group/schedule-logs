@@ -11,6 +11,7 @@ from group_setup import (
     provision_google_resources,
     required_slide_placeholders,
     parse_service_account_json,
+    should_migrate_schedule,
 )
 from config import GROUPS
 
@@ -126,6 +127,13 @@ class FakeSpreadsheet:
 
 
 class GroupSetupTest(unittest.TestCase):
+    def test_initial_setup_allows_supported_schedule_layout_migration(self):
+        self.assertTrue(should_migrate_schedule(True, False, True))
+        self.assertTrue(should_migrate_schedule(True, False, False))
+        self.assertFalse(should_migrate_schedule(False, False, True))
+        self.assertFalse(should_migrate_schedule(False, True, False))
+        self.assertTrue(should_migrate_schedule(False, True, True))
+
     def test_cloud_shell_output_can_be_pasted_with_markers(self):
         service_account = service_account_fixture()
         output = (

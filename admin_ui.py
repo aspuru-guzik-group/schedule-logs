@@ -11,6 +11,7 @@ from group_setup import (
     initialize_google_resources,
     parse_service_account_json,
     provision_google_resources,
+    should_migrate_schedule,
 )
 from runtime_config import (
     get_group_runtime_config,
@@ -311,8 +312,11 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 updated_group,
                 values,
                 service_account,
-                allow_schedule_migration=presenter_change
-                and migration_confirmed,
+                allow_schedule_migration=should_migrate_schedule(
+                    setup_mode,
+                    presenter_change,
+                    migration_confirmed,
+                ),
             )
             updates = {
                 **normalized,

@@ -159,6 +159,15 @@ def _schedule_headers(num_presenters):
     return ["Date", *[f"Presenter {index + 1}" for index in range(num_presenters)]]
 
 
+def should_migrate_schedule(
+    initial_setup, presenter_mode_changed, migration_confirmed
+):
+    """Allow supported layouts to migrate automatically during initial setup."""
+    return initial_setup or (
+        presenter_mode_changed and migration_confirmed
+    )
+
+
 def _migrate_schedule(spreadsheet, worksheet, expected_headers):
     current_headers = worksheet.row_values(1)
     supported_headers = (
