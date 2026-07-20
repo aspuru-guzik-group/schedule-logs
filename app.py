@@ -109,7 +109,7 @@ if not group_slug or group_slug not in GROUPS:
                 label += "  (coming soon)"
             if st.button(
                 label,
-                use_container_width=True,
+                width="stretch",
                 disabled=not configured and not self_service_setup,
                 key=f"group_{slug}",
             ):
@@ -137,7 +137,7 @@ if not group_configured:
             f"**{group['emoji']} {group['display_name']}** has not been configured yet.\n\n"
             "This subgroup has not been configured yet."
         )
-        if st.button("Back to Home", use_container_width=True):
+        if st.button("Back to Home", width="stretch"):
             st.query_params.clear()
             st.rerun()
     st.stop()
@@ -502,7 +502,7 @@ else:
                 edited_df = st.data_editor(
                     df,
                     num_rows="fixed",
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "Date": st.column_config.DateColumn("Date"),
                         "DetailsLink": st.column_config.LinkColumn(
@@ -647,7 +647,7 @@ else:
                         ),
                     },
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     # ----- PARTICIPANT SCORES -----
@@ -733,7 +733,7 @@ else:
             }
             st.dataframe(
                 styled_scores,
-                use_container_width=True,
+                width="stretch",
                 column_config=column_config,
             )
         else:

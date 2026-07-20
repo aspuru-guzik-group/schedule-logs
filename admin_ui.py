@@ -426,7 +426,7 @@ def render_unconfigured_setup_page(group_slug, group):
         if not render_admin_login(
             group_slug, container=st, key_prefix="setup"
         ):
-            if st.button("Back to schedules", use_container_width=True):
+            if st.button("Back to schedules", width="stretch"):
                 st.query_params.clear()
                 st.rerun()
             return
@@ -441,6 +441,6 @@ def render_unconfigured_setup_page(group_slug, group):
         with st.expander("Admin password"):
             render_change_password(group_slug)
 
-        if st.button("Back to schedules", use_container_width=True):
+        if st.button("Back to schedules", width="stretch"):
             st.query_params.clear()
             st.rerun()
