@@ -10,6 +10,13 @@ import admin_ui
 from config import GROUPS, get_group_config, get_presenter_cols
 from auth import require_auth
 
+
+GROUP_CALENDAR_URL = (
+    "https://calendar.google.com/calendar/embed?"
+    "src=k9494ibh4l1fgfm9q8fmat79ek%40group.calendar.google.com&"
+    "ctz=America%2FToronto"
+)
+
 ###############################################
 # PAGE CONFIG
 ###############################################
@@ -111,12 +118,10 @@ if not group_slug or group_slug not in GROUPS:
 
     st.write("---")
     st.subheader("Group Calendar")
-    st.iframe(
-        "https://calendar.google.com/calendar/embed?"
-        "src=k9494ibh4l1fgfm9q8fmat79ek%40group.calendar.google.com&"
-        "ctz=America%2FToronto",
+    st.link_button(
+        "Open group calendar",
+        GROUP_CALENDAR_URL,
         width="stretch",
-        height=600,
     )
     st.stop()
 
