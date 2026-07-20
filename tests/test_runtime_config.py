@@ -127,6 +127,40 @@ class RuntimeConfigTest(unittest.TestCase):
             )
             self.assertTrue(is_runtime_group_ready("elagente", path))
 
+    def test_oauth_group_is_ready_without_a_service_account(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "groups.json"
+            client_id = "client-id.apps.googleusercontent.com"
+            save_google_oauth_client(
+                {"web": {"client_id": client_id, "client_secret": "secret"}},
+                path,
+            )
+            save_group_runtime_config(
+                "robotics",
+                {
+                    "organizer_name": "Organizer",
+                    "folder_id": "folder",
+                    "slides_folder_id": "slides-folder",
+                    "slides_template_id": "template",
+                    "spreadsheet_id": "sheet",
+                    "encryption_key": "key",
+                    "drive_storage_mode": "oauth",
+                    "drive_oauth": {
+                        "client_id": client_id,
+                        "refresh_token": "refresh-token",
+                    },
+                },
+                path,
+            )
+
+            self.assertTrue(is_runtime_group_ready("robotics", path))
+
+            save_google_oauth_client(
+                {"web": {"client_id": "replacement", "client_secret": "secret"}},
+                path,
+            )
+            self.assertFalse(is_runtime_group_ready("robotics", path))
+
 
 if __name__ == "__main__":
     unittest.main()

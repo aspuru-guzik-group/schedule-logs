@@ -239,6 +239,10 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
     current_service_account = current.get("gcp_service_account", {})
     personal_drive_enabled = group.get("google_drive_oauth_enabled", False)
     personal_drive_connected = gu.has_drive_oauth(group_slug)
+    personal_drive_required = gu.is_drive_oauth_required(group_slug)
+    oauth_only_configuration = personal_drive_enabled and (
+        setup_mode or (personal_drive_connected and not current_service_account)
+    )
 
     if current_service_account.get("client_email"):
         account_label = (
@@ -268,16 +272,22 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         )
         automatic_setup = setup_method == "Create everything"
 
-    (
-        uploaded_file,
-        pasted_json,
-        pending_service_account,
-        replacing_service_account,
-    ) = _render_google_key_inputs(group_slug, current_service_account)
+    if oauth_only_configuration:
+        uploaded_file = None
+        pasted_json = ""
+        pending_service_account = current_service_account or None
+        replacing_service_account = False
+    else:
+        (
+            uploaded_file,
+            pasted_json,
+            pending_service_account,
+            replacing_service_account,
+        ) = _render_google_key_inputs(group_slug, current_service_account)
     if pending_service_account is None and setup_draft:
         pending_service_account = current_service_account
     if automatic_setup and personal_drive_enabled:
-        st.markdown("#### 2. Google Drive")
+        st.markdown("#### Google Drive")
         if personal_drive_connected:
             st.success("The new subgroup workspace will be created in this Drive")
         else:
@@ -313,6 +323,16 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             GOOGLE_DRIVE_URL,
             width="content",
         )
+
+    if personal_drive_required:
+        folder_help = "The connected lead account must be able to add files here."
+    elif personal_drive_enabled:
+        folder_help = (
+            "The connected lead account must be able to add files here. "
+            "Without a connection, this must remain in a Shared Drive."
+        )
+    else:
+        folder_help = "The folder must be inside Shared drives, not My Drive."
 
     form_key = f"{group_slug}_{'setup' if setup_mode else 'settings'}"
     with st.form(form_key):
@@ -391,20 +411,12 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             folder_id = st.text_input(
                 "Materials folder URL or ID",
                 value=str(current.get("folder_id", "")),
-                help=(
-                    "The connected lead account must be able to add files here."
-                    if personal_drive_enabled
-                    else "The folder must be inside Shared drives, not My Drive."
-                ),
+                help=folder_help,
             )
             slides_folder_id = st.text_input(
                 "Slides folder URL or ID",
                 value=str(current.get("slides_folder_id", "")),
-                help=(
-                    "The connected lead account must be able to add files here."
-                    if personal_drive_enabled
-                    else "The folder must be inside Shared drives, not My Drive."
-                ),
+                help=folder_help,
             )
             slides_template_id = st.text_input(
                 "Slides template URL or ID",
@@ -438,9 +450,16 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             and not pasted_json.strip()
         ):
             raise ValueError("Upload or paste the new Google key")
-        service_account = _service_account_from_form(
-            uploaded_file, pasted_json, current
-        )
+        if oauth_only_configuration:
+            service_account = (
+                parse_service_account_json(current_service_account)
+                if current_service_account
+                else None
+            )
+        else:
+            service_account = _service_account_from_form(
+                uploaded_file, pasted_json, current
+            )
         if setup_mode:
             draft = {
                 "setup_method": setup_method,
@@ -455,8 +474,9 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 "folder_id": folder_id,
                 "slides_folder_id": slides_folder_id,
                 "slides_template_id": slides_template_id,
-                "gcp_service_account": service_account,
             }
+            if service_account is not None:
+                draft["gcp_service_account"] = service_account
             save_group_runtime_config(group_slug, {"setup_draft": draft})
         if not organizer_name.strip():
             raise ValueError("Organizer name is required")
@@ -503,13 +523,17 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 }
             drive_service = None
             slides_service = None
-            if personal_drive_enabled:
-                if not personal_drive_connected:
+            gspread_client = None
+            if personal_drive_connected:
+                drive_service = gu.get_drive_service(group_slug)
+                slides_service = gu.get_slides_service(group_slug)
+                if service_account is None:
+                    gspread_client = gu.get_gspread_client(group_slug)
+            elif setup_mode or personal_drive_required:
+                if personal_drive_enabled:
                     raise ValueError(
                         "Connect the subgroup lead's Google Drive account first"
                     )
-                drive_service = gu.get_drive_service(group_slug)
-                slides_service = gu.get_slides_service(group_slug)
             normalized, messages = initialize_google_resources(
                 updated_group,
                 values,
@@ -519,13 +543,13 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                     presenter_change,
                     migration_confirmed,
                 ),
-                allow_my_drive=personal_drive_enabled,
+                allow_my_drive=personal_drive_connected,
                 _drive=drive_service,
                 _slides=slides_service,
+                _gspread=gspread_client,
             )
             updates = {
                 **normalized,
-                "gcp_service_account": service_account,
                 "organizer_name": organizer_name.strip(),
                 "zoom_link": zoom_link.strip(),
                 "num_presenters": int(num_presenters),
@@ -533,8 +557,15 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 "presentation_duration": int(presentation_duration),
                 "encryption_key": current.get("encryption_key")
                 or secrets.token_urlsafe(32),
+                "drive_storage_mode": (
+                    "oauth"
+                    if personal_drive_connected
+                    else current.get("drive_storage_mode", "service_account")
+                ),
                 "setup_draft": {},
             }
+            if service_account is not None:
+                updates["gcp_service_account"] = service_account
             save_group_runtime_config(group_slug, updates)
     except Exception as exc:
         st.error(f"Setup validation failed: {exc}")

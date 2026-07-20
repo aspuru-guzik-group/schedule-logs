@@ -28,7 +28,6 @@ REQUIRED_INTEGRATION_FIELDS = (
     "slides_template_id",
     "spreadsheet_id",
     "encryption_key",
-    "gcp_service_account",
 )
 
 _CONFIG_LOCK = threading.RLock()
@@ -133,8 +132,17 @@ def is_runtime_group_ready(group_slug, path=None):
     config = get_group_runtime_config(group_slug, path)
     if not all(config.get(field) for field in REQUIRED_INTEGRATION_FIELDS):
         return False
-    service_account = config["gcp_service_account"]
-    return all(service_account.get(field) for field in SERVICE_ACCOUNT_FIELDS)
+    service_account = config.get("gcp_service_account", {})
+    if all(service_account.get(field) for field in SERVICE_ACCOUNT_FIELDS):
+        return True
+    oauth_client_id = get_google_oauth_client(path).get("web", {}).get("client_id")
+    drive_oauth = config.get("drive_oauth", {})
+    return bool(
+        config.get("drive_storage_mode") == "oauth"
+        and oauth_client_id
+        and drive_oauth.get("refresh_token")
+        and drive_oauth.get("client_id") == oauth_client_id
+    )
 
 
 def _encode(value):

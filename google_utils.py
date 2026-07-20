@@ -5,6 +5,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request as GoogleAuthRequest
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaInMemoryUpload
@@ -130,12 +131,24 @@ def has_drive_oauth(group_slug):
     )
 
 
+def is_drive_oauth_required(group_slug):
+    static_required = GROUPS.get(group_slug, {}).get(
+        "google_drive_oauth_required", False
+    )
+    runtime_mode = get_group_runtime_config(group_slug).get("drive_storage_mode")
+    return bool(static_required or runtime_mode == "oauth")
+
+
 def _get_drive_credentials(group_slug):
-    if is_drive_oauth_enabled(group_slug):
+    if has_drive_oauth(group_slug):
         try:
             return google_drive_oauth.get_user_credentials(group_slug)
         except google_drive_oauth.GoogleDriveOAuthError as exc:
             raise DriveOAuthConnectionError(str(exc)) from exc
+    if is_drive_oauth_required(group_slug):
+        raise DriveOAuthConnectionError(
+            "Connect the subgroup lead's Google Drive account in Admin Settings."
+        )
     service_account_info = _get_service_account_info(group_slug)
     return Credentials.from_service_account_info(
         service_account_info, scopes=SCOPES
@@ -147,7 +160,12 @@ def is_group_configured(group_slug):
     if not all(config.get(field) for field in REQUIRED_INTEGRATION_FIELDS):
         return False
     service_account = config.get("gcp_service_account", {})
-    return all(service_account.get(field) for field in SERVICE_ACCOUNT_FIELDS)
+    if all(service_account.get(field) for field in SERVICE_ACCOUNT_FIELDS):
+        return True
+    return bool(
+        config.get("drive_storage_mode") == "oauth"
+        and has_drive_oauth(group_slug)
+    )
 
 
 def _get_service_account_info(group_slug):
@@ -156,17 +174,40 @@ def _get_service_account_info(group_slug):
 
 
 def get_gspread_client(group_slug):
-    service_account_info = _get_service_account_info(group_slug)
-    credentials = Credentials.from_service_account_info(
-        service_account_info, scopes=SCOPES
-    )
+    config = get_group_connection_config(group_slug)
+    service_account_info = config.get("gcp_service_account", {})
+    if all(
+        service_account_info.get(field) for field in SERVICE_ACCOUNT_FIELDS
+    ):
+        credentials = Credentials.from_service_account_info(
+            service_account_info, scopes=SCOPES
+        )
+    elif has_drive_oauth(group_slug):
+        try:
+            credentials = google_drive_oauth.get_user_credentials(group_slug)
+            credentials.refresh(GoogleAuthRequest())
+        except google_drive_oauth.GoogleDriveOAuthError as exc:
+            raise DriveOAuthConnectionError(str(exc)) from exc
+        except RefreshError as exc:
+            raise DriveOAuthConnectionError(
+                DRIVE_OAUTH_CONNECTION_MESSAGE
+            ) from exc
+    else:
+        raise DriveOAuthConnectionError(
+            "Connect the subgroup lead's Google Drive account in Admin Settings."
+        )
     return gspread.authorize(credentials)
 
 
 def get_sheet(sheet_name, group_slug):
-    client = get_gspread_client(group_slug)
-    spreadsheet_id = get_group_connection_config(group_slug)["spreadsheet_id"]
-    return client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    try:
+        client = get_gspread_client(group_slug)
+        spreadsheet_id = get_group_connection_config(group_slug)["spreadsheet_id"]
+        return client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    except RefreshError as exc:
+        raise DriveOAuthConnectionError(
+            DRIVE_OAUTH_CONNECTION_MESSAGE
+        ) from exc
 
 
 def get_schedule_df(group_slug):

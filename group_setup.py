@@ -326,10 +326,15 @@ def provision_google_resources(
     allow_my_drive=False,
 ):
     """Create or reuse all subgroup resources inside one Drive folder."""
-    service_account = validate_service_account(service_account)
+    if service_account is not None:
+        service_account = validate_service_account(service_account)
+    elif not allow_my_drive:
+        raise ValueError("A Google service-account key is required")
     workspace_folder_id = extract_resource_id(workspace_folder, "folder")
 
     if _drive is None:
+        if service_account is None:
+            raise ValueError("Connect the subgroup lead's Google Drive account first")
         try:
             from google.oauth2.service_account import Credentials
             from googleapiclient.discovery import build
@@ -458,7 +463,8 @@ def provision_google_resources_in_my_drive(
     _drive=None,
 ):
     """Create or reuse a complete subgroup workspace in the lead's My Drive."""
-    service_account = validate_service_account(service_account)
+    if service_account is not None:
+        service_account = validate_service_account(service_account)
     if _drive is None:
         raise ValueError("Connect the subgroup lead's Google Drive account first")
 
@@ -484,15 +490,16 @@ def provision_google_resources_in_my_drive(
         0,
         f"{'Created' if created else 'Reused'} {workspace['name']}",
     )
-    permission_created = _ensure_service_account_sheet_access(
-        _drive,
-        values["spreadsheet_id"],
-        service_account["client_email"],
-    )
-    messages.append(
-        ("Shared" if permission_created else "Verified access to")
-        + " the Schedule Sheet for the app"
-    )
+    if service_account is not None:
+        permission_created = _ensure_service_account_sheet_access(
+            _drive,
+            values["spreadsheet_id"],
+            service_account["client_email"],
+        )
+        messages.append(
+            ("Shared" if permission_created else "Verified access to")
+            + " the Schedule Sheet for the app"
+        )
     return values, messages
 
 
@@ -504,6 +511,7 @@ def initialize_google_resources(
     allow_my_drive=False,
     _drive=None,
     _slides=None,
+    _gspread=None,
 ):
     """Validate access, create Sheet tabs, and optionally migrate presenter columns."""
     try:
@@ -513,17 +521,28 @@ def initialize_google_resources(
     except ImportError as exc:
         raise RuntimeError("Google API dependencies are unavailable") from exc
 
-    service_account = validate_service_account(service_account)
+    if service_account is not None:
+        service_account = validate_service_account(service_account)
     values = normalize_resource_values(values)
-    credentials = Credentials.from_service_account_info(
-        service_account, scopes=SCOPES
-    )
-    spreadsheet = gspread.authorize(credentials).open_by_key(
-        values["spreadsheet_id"]
-    )
+    credentials = None
+    if service_account is not None:
+        credentials = Credentials.from_service_account_info(
+            service_account, scopes=SCOPES
+        )
+        gspread_client = gspread.authorize(credentials)
+    elif _gspread is not None:
+        gspread_client = _gspread
+    else:
+        raise ValueError("Connect the subgroup lead's Google Drive account first")
+    spreadsheet = gspread_client.open_by_key(values["spreadsheet_id"])
     messages = [f"Verified Google Sheet: {spreadsheet.title}"]
 
-    drive = _drive or build("drive", "v3", credentials=credentials)
+    if _drive is not None:
+        drive = _drive
+    elif credentials is not None:
+        drive = build("drive", "v3", credentials=credentials)
+    else:
+        raise ValueError("Connect the subgroup lead's Google Drive account first")
     resources = (
         (
             "materials folder",
@@ -573,7 +592,12 @@ def initialize_google_resources(
             )
         messages.append(f"Verified {label}: {metadata['name']}")
 
-    slides = _slides or build("slides", "v1", credentials=credentials)
+    if _slides is not None:
+        slides = _slides
+    elif credentials is not None:
+        slides = build("slides", "v1", credentials=credentials)
+    else:
+        raise ValueError("Connect the subgroup lead's Google Drive account first")
     presentation = (
         slides.presentations()
         .get(presentationId=values["slides_template_id"])

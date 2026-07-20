@@ -21,6 +21,7 @@ from runtime_config import (
 OAUTH_SCOPES = (
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/presentations",
+    "https://www.googleapis.com/auth/spreadsheets",
 )
 STATE_PREFIX = "schedule-drive:"
 STATE_MAX_AGE_SECONDS = 15 * 60

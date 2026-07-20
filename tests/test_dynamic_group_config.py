@@ -13,6 +13,7 @@ class DynamicGroupConfigTest(unittest.TestCase):
         for slug, group in GROUPS.items():
             with self.subTest(slug=slug):
                 self.assertTrue(group["self_service_setup"])
+                self.assertTrue(group["google_drive_oauth_enabled"])
 
     def test_el_agente_uses_supplied_default_slides_template(self):
         self.assertIn(

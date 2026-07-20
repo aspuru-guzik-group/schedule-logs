@@ -47,6 +47,20 @@ class FakeDrive:
     google_drive_oauth is None, "Google OAuth dependencies are not installed"
 )
 class GoogleDriveOAuthTest(unittest.TestCase):
+    def test_oauth_scope_covers_all_google_resource_types(self):
+        self.assertIn(
+            "https://www.googleapis.com/auth/drive",
+            google_drive_oauth.OAUTH_SCOPES,
+        )
+        self.assertIn(
+            "https://www.googleapis.com/auth/presentations",
+            google_drive_oauth.OAUTH_SCOPES,
+        )
+        self.assertIn(
+            "https://www.googleapis.com/auth/spreadsheets",
+            google_drive_oauth.OAUTH_SCOPES,
+        )
+
     def test_client_requires_exact_web_redirect_uri(self):
         client = oauth_client_fixture()
         self.assertEqual(

@@ -208,6 +208,20 @@ class GroupSetupTest(unittest.TestCase):
         self.assertEqual(len(drive.files_api.resources), 5)
         self.assertEqual(len(drive.permissions_api.values), 1)
 
+    def test_personal_drive_setup_does_not_require_a_service_account(self):
+        drive = FakeDrive(workspace_drive_id=None)
+
+        values, _ = provision_google_resources_in_my_drive(
+            "robotics",
+            GROUPS["robotics"],
+            None,
+            _drive=drive,
+        )
+
+        self.assertEqual(len(drive.files_api.resources), 5)
+        self.assertEqual(len(drive.permissions_api.values), 0)
+        self.assertTrue(values["spreadsheet_id"])
+
     def test_headers_allow_only_surrounding_whitespace_repair(self):
         expected = ["Date", "Title", "Description", "PDF_Name", "PDF_Link"]
 

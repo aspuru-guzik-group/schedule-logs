@@ -228,7 +228,11 @@ if "confirmation" in params:
             st.rerun()
 
     with st.spinner("Loading data. Please wait..."):
-        df = gu.get_schedule_df(group_slug)
+        try:
+            df = gu.get_schedule_df(group_slug)
+        except gu.DriveOAuthConnectionError as exc:
+            st.error(str(exc))
+            st.stop()
         row_indices = df.index[df["Date"] == meeting_date].tolist()
         if not row_indices:
             st.error("No meeting scheduled for this date.")
@@ -335,6 +339,9 @@ elif "date" in params:
 
     try:
         df = load_schedule_data(group_slug)
+    except gu.DriveOAuthConnectionError as exc:
+        st.error(str(exc))
+        st.stop()
     except FileNotFoundError:
         st.error("Schedule not found!")
         st.stop()
@@ -506,6 +513,9 @@ else:
 
     try:
         df_full = load_schedule_data(group_slug)
+    except gu.DriveOAuthConnectionError as exc:
+        st.error(str(exc))
+        st.stop()
     except FileNotFoundError:
         st.error("Schedule not found!")
         st.stop()

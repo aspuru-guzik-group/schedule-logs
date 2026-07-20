@@ -4,11 +4,19 @@ Unified schedule app for all MatterLab subgroup meetings at `schedule.matter.tor
 
 ## Setup
 
-### 1. Create a GCP service account
+The recommended setup is the in-app admin flow: connect the subgroup lead's
+Google account and choose **Create everything**. The app creates and connects all
+Google resources in that account; no per-subgroup GCP project or JSON key is
+needed.
 
-Each subgroup currently uses its own Google Cloud service account for the Sheet.
-Subgroups with lead-owned Drive OAuth enabled use the connected lead account for
-generated Slides and PDF uploads; legacy subgroups use a Shared Drive.
+The steps below document the legacy/manual recovery path for existing service
+accounts and Shared Drives.
+
+### 1. Create a GCP service account (legacy)
+
+Every subgroup supports lead-owned Drive OAuth for generated Slides and PDF
+uploads. Existing groups can continue using their service account and Shared
+Drive until their lead connects.
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
 2. Create a new project (or use an existing one) — the `project_id` in your secrets comes from here
@@ -58,10 +66,10 @@ Add these tabs (exact names):
 
 ### 3. Create Drive folders
 
-For legacy subgroups, create two folders inside a Google Shared Drive and grant
-the service account `client_email` **Content manager** access. For an
-OAuth-enabled subgroup, connect the lead's Google account in Admin Settings;
-the folders may remain in My Drive.
+For an existing service-account setup, create two folders inside a Google Shared
+Drive and grant the service account `client_email` **Content manager** access.
+When the lead connects Google Drive in Admin Settings, the folders may remain in
+My Drive instead.
 
 - **Materials folder** — for uploaded PDFs → this is `folder_id`
 - **Slides folder** — for generated slide decks → this is `slides_folder_id`
@@ -184,31 +192,28 @@ directly and forge that proxy header.
 
 Every subgroup uses the same self-service configuration and always appears as a
 normal subgroup entry. When one is not configured, opening it shows the admin
-setup screen instead of a schedule. For OAuth-enabled groups, the lead connects
-their Google account and the app creates the workspace folder, Sheet and required
-tabs, materials folder, generated-slides folder, and Slides template in their My
-Drive. A manual path remains available to connect existing resources. Legacy
-groups retain the Shared Drive setup path.
+setup screen instead of a schedule. The lead connects their Google account and
+the app creates the workspace folder, Sheet and required tabs, materials folder,
+generated-slides folder, and Slides template in their My Drive. A manual path
+remains available to connect existing resources. Configured Shared Drive groups
+continue working before their lead connects.
 
-The setup page links directly to Google Cloud Shell and provides one copyable
-command. That command creates a separate Google Cloud project and service account,
-enables the required APIs, and prints the JSON key for pasting back into the app.
-After the key is pasted, the app extracts and displays its `client_email` next to
-the Google Drive workspace link.
+The Google Cloud Shell key generator remains available only for legacy recovery
+and existing service-account configurations.
 
 Submitted setup values are stored as a private draft before Google validation.
-Failed validation and application deployments therefore preserve the key, URLs,
+Failed validation and application deployments therefore preserve URLs,
 meeting settings, and selected setup mode for the next retry. The draft does not
 enable the subgroup and is cleared after validation succeeds.
 
-Service accounts have no personal Drive storage. OAuth-enabled groups therefore
-create generated Slides and uploaded PDFs as the connected lead, using that
-account's My Drive quota. During a handover, the new lead reconnects from Admin
+Service accounts have no personal Drive storage. Connected groups therefore create
+generated Slides and uploaded PDFs as the lead, using that account's My Drive
+quota. During a handover, the new lead reconnects from Admin
 Settings; the stored resource IDs and deployment do not change, provided the new
 lead can access the existing resources.
 
-The first OAuth-enabled group also shows a one-time operator setup when no site
-OAuth client exists. Create a Google OAuth client with application type **Web**,
+The site shows a one-time operator setup when no OAuth client exists. Create a
+Google OAuth client with application type **Web**,
 add the exact redirect URI displayed by the app, and upload the downloaded JSON.
 After that, subgroup leads only use **Connect Google Drive**. The OAuth client and
 per-group refresh tokens are stored in `data/groups.json`, which is mode `0600`.

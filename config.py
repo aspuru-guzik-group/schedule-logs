@@ -12,6 +12,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] General Group Meeting",
         "meeting_title": "General Group Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "quantum": {
@@ -23,6 +24,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Quantum Subgroup",
         "meeting_title": "Quantum Subgroup Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "ml": {
@@ -34,6 +36,7 @@ GROUPS = {
         "presentation_duration": 20,
         "email_subject": "[Confirmation Required] ML Subgroup",
         "meeting_title": "ML Subgroup Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "elagente": {
@@ -50,6 +53,7 @@ GROUPS = {
             "1Gjpm344FZtayS9QCr5iPQI_pI1XZOfQ5bU4uoZ8o7d4/edit"
         ),
         "google_drive_oauth_enabled": True,
+        "google_drive_oauth_required": True,
         "self_service_setup": True,
     },
     "drugdiscovery": {
@@ -61,6 +65,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Drug Discovery Subgroup",
         "meeting_title": "Drug Discovery Subgroup Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "handson": {
@@ -72,6 +77,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Hands-on Subgroup",
         "meeting_title": "Hands-on Subgroup Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "robotics": {
@@ -83,6 +89,7 @@ GROUPS = {
         "presentation_duration": 50,
         "email_subject": "[Confirmation Required] Robotics Subgroup",
         "meeting_title": "Robotics Subgroup Meeting",
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
 }
