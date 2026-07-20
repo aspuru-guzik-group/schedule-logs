@@ -93,16 +93,6 @@ def create_authorization_url(group_slug, redirect_uri, path=None, now=None):
         raise GoogleDriveOAuthError("Google OAuth has not been configured yet")
 
     state = f"{STATE_PREFIX}{group_slug}:{secrets.token_urlsafe(32)}"
-    save_group_runtime_config(
-        group_slug,
-        {
-            "drive_oauth_pending": {
-                "state_digest": _state_digest(state),
-                "created_at": int(now if now is not None else time.time()),
-            }
-        },
-        path,
-    )
     flow = Flow.from_client_config(
         client,
         scopes=OAUTH_SCOPES,
@@ -113,6 +103,22 @@ def create_authorization_url(group_slug, redirect_uri, path=None, now=None):
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
+    )
+    code_verifier = flow.code_verifier
+    if not isinstance(code_verifier, str) or not code_verifier:
+        raise GoogleDriveOAuthError(
+            "Google Drive connection security could not be initialized. Start again."
+        )
+    save_group_runtime_config(
+        group_slug,
+        {
+            "drive_oauth_pending": {
+                "state_digest": _state_digest(state),
+                "code_verifier": code_verifier,
+                "created_at": int(now if now is not None else time.time()),
+            }
+        },
+        path,
     )
     return authorization_url
 
@@ -173,19 +179,30 @@ def finish_connection(code, state, redirect_uri, path=None, now=None):
         raise GoogleDriveOAuthError(
             "This Google Drive connection link expired. Start the connection again."
         )
+    code_verifier = pending.get("code_verifier")
+    if not isinstance(code_verifier, str) or not code_verifier:
+        save_group_runtime_config(
+            group_slug, {"drive_oauth_pending": {}}, path
+        )
+        raise GoogleDriveOAuthError(
+            "This Google Drive connection link was created before the latest "
+            "update. Start the connection again."
+        )
 
     client = get_google_oauth_client(path)
     if not client.get("web", {}).get("client_id"):
         raise GoogleDriveOAuthError("Google OAuth has not been configured yet")
 
     save_group_runtime_config(group_slug, {"drive_oauth_pending": {}}, path)
-    flow = Flow.from_client_config(
-        client,
-        scopes=OAUTH_SCOPES,
-        redirect_uri=redirect_uri,
-        state=state,
-    )
     try:
+        flow = Flow.from_client_config(
+            client,
+            scopes=OAUTH_SCOPES,
+            redirect_uri=redirect_uri,
+            state=state,
+            code_verifier=code_verifier,
+            autogenerate_code_verifier=False,
+        )
         flow.fetch_token(code=code)
     except Exception as exc:
         raise GoogleDriveOAuthError(

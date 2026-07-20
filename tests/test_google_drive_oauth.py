@@ -83,7 +83,10 @@ class GoogleDriveOAuthTest(unittest.TestCase):
             captured = {}
 
             class AuthorizationFlow:
+                code_verifier = None
+
                 def authorization_url(self, **_kwargs):
+                    self.code_verifier = "saved-pkce-verifier"
                     return "https://accounts.example.test/authorize", self.state
 
             def authorization_flow(_client, **kwargs):
@@ -102,6 +105,12 @@ class GoogleDriveOAuthTest(unittest.TestCase):
                 )
 
             self.assertEqual(url, "https://accounts.example.test/authorize")
+            pending = google_drive_oauth.get_group_runtime_config(
+                "elagente", path
+            )["drive_oauth_pending"]
+            self.assertEqual(
+                pending["code_verifier"], "saved-pkce-verifier"
+            )
 
             class CallbackFlow:
                 credentials = SimpleNamespace(refresh_token="refresh-token")
@@ -109,10 +118,14 @@ class GoogleDriveOAuthTest(unittest.TestCase):
                 def fetch_token(self, **_kwargs):
                     return None
 
+            def callback_flow(_client, **kwargs):
+                captured["callback_kwargs"] = kwargs
+                return CallbackFlow()
+
             with patch.object(
                 google_drive_oauth.Flow,
                 "from_client_config",
-                return_value=CallbackFlow(),
+                side_effect=callback_flow,
             ), patch.object(
                 google_drive_oauth, "build", return_value=FakeDrive()
             ):
@@ -126,6 +139,13 @@ class GoogleDriveOAuthTest(unittest.TestCase):
 
             self.assertEqual(slug, "elagente")
             self.assertEqual(connection["email"], "felix@example.test")
+            self.assertEqual(
+                captured["callback_kwargs"]["code_verifier"],
+                "saved-pkce-verifier",
+            )
+            self.assertFalse(
+                captured["callback_kwargs"]["autogenerate_code_verifier"]
+            )
             self.assertTrue(google_drive_oauth.has_connection("elagente", path))
             credentials = google_drive_oauth.get_user_credentials("elagente", path)
             self.assertEqual(credentials.refresh_token, "refresh-token")
@@ -146,7 +166,10 @@ class GoogleDriveOAuthTest(unittest.TestCase):
             captured = {}
 
             class FlowValue:
+                code_verifier = None
+
                 def authorization_url(self, **_kwargs):
+                    self.code_verifier = "saved-pkce-verifier"
                     return "https://accounts.example.test", self.state
 
             def flow_factory(_client, **kwargs):
@@ -174,6 +197,41 @@ class GoogleDriveOAuthTest(unittest.TestCase):
                     path,
                     now=100 + google_drive_oauth.STATE_MAX_AGE_SECONDS + 1,
                 )
+
+    def test_connection_state_without_pkce_verifier_requires_restart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "groups.json"
+            google_drive_oauth.save_oauth_client(
+                oauth_client_fixture(), REDIRECT_URI, path
+            )
+            state = "schedule-drive:elagente:legacy-state"
+            google_drive_oauth.save_group_runtime_config(
+                "elagente",
+                {
+                    "drive_oauth_pending": {
+                        "state_digest": google_drive_oauth._state_digest(state),
+                        "created_at": 100,
+                    }
+                },
+                path,
+            )
+
+            with patch.object(
+                google_drive_oauth.Flow, "from_client_config"
+            ) as flow_factory, self.assertRaisesRegex(
+                google_drive_oauth.GoogleDriveOAuthError, "latest update"
+            ):
+                google_drive_oauth.finish_connection(
+                    "code", state, REDIRECT_URI, path, now=101
+                )
+
+            flow_factory.assert_not_called()
+            self.assertEqual(
+                google_drive_oauth.get_group_runtime_config(
+                    "elagente", path
+                )["drive_oauth_pending"],
+                {},
+            )
 
 
 if __name__ == "__main__":
