@@ -185,6 +185,12 @@ The app creates the Sheet and required tabs, materials folder, generated-slides
 folder, and a subgroup-specific copy of the ML Slides template before enabling the
 subgroup. A manual path remains available to connect existing resources.
 
+The setup page links directly to Google Cloud Shell and provides one copyable
+command. That command creates a separate Google Cloud project and service account,
+enables the required APIs, and prints the JSON key for pasting back into the app.
+After the key is pasted, the app extracts and displays its `client_email` next to
+the Google Drive workspace link.
+
 Use a Shared Drive workspace folder when possible. The Shared Drive owns its
 files, so they remain available when a subgroup lead or service account changes.
 For a handover, grant the new service account access to the existing workspace

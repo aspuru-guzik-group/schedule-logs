@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from group_setup import (
@@ -9,6 +10,7 @@ from group_setup import (
     missing_slide_placeholders,
     provision_google_resources,
     required_slide_placeholders,
+    parse_service_account_json,
 )
 from config import GROUPS
 
@@ -124,6 +126,16 @@ class FakeSpreadsheet:
 
 
 class GroupSetupTest(unittest.TestCase):
+    def test_cloud_shell_output_can_be_pasted_with_markers(self):
+        service_account = service_account_fixture()
+        output = (
+            "Cloud setup log\n---BEGIN JSON---\n"
+            + json.dumps(service_account)
+            + "\n---END JSON---\n"
+        )
+
+        self.assertEqual(parse_service_account_json(output), service_account)
+
     def test_slide_placeholders_match_presenter_mode(self):
         self.assertEqual(
             required_slide_placeholders(1),

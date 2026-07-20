@@ -20,6 +20,14 @@ from runtime_config import (
 )
 
 
+CLOUD_SHELL_URL = "https://shell.cloud.google.com/?show=terminal"
+GOOGLE_DRIVE_URL = "https://drive.google.com/drive/u/0/my-drive"
+CLOUD_SETUP_COMMAND = (
+    "bash <(curl -fsSL https://raw.githubusercontent.com/"
+    "aspuru-guzik-group/schedule-logs/main/scripts/create_google_key.sh)"
+)
+
+
 def _admin_session_key(group_slug):
     return f"{group_slug}_admin_authenticated"
 
@@ -63,19 +71,55 @@ def render_admin_login(group_slug, container=None, key_prefix="sidebar"):
 
 
 def render_setup_checklist():
-    st.subheader("Setup checklist")
-    st.markdown(
-        """
-1. Create a Google Cloud service account and download its JSON key. Enable the
-   Google Sheets, Drive, and Slides APIs.
-2. Create one empty Google Drive folder. A Shared Drive folder is recommended so
-   subgroup files survive future lead changes.
-3. Share that folder with the JSON key's `client_email` as **Editor** (My Drive)
-   or **Content manager** (Shared Drive).
-4. Upload the JSON key and paste that one folder URL below. The app creates the
-   Sheet, required tabs, materials folder, slides folder, and Slides template.
-"""
+    st.info(
+        "You only need a Google key and one Drive workspace. "
+        "The app creates and connects everything else."
     )
+
+
+def _render_google_key_inputs(group_slug, current_service_account):
+    replacing = not current_service_account
+    if current_service_account:
+        replacing = st.toggle(
+            "Replace Google service account",
+            value=False,
+            key=f"{group_slug}_replace_service_account",
+        )
+        if not replacing:
+            return None, "", None, False
+
+    st.markdown("#### 1. Google key")
+    st.link_button(
+        "Open Google Cloud Shell",
+        CLOUD_SHELL_URL,
+        width="stretch",
+    )
+    st.code(CLOUD_SETUP_COMMAND, language="bash")
+    uploaded_file = st.file_uploader(
+        "Upload the generated JSON",
+        type=["json"],
+        key=f"{group_slug}_quick_key_upload",
+    )
+    pasted_json = st.text_area(
+        "Or paste the generated JSON",
+        height=120,
+        placeholder='{"type": "service_account", ...}',
+        key=f"{group_slug}_quick_key_json",
+    )
+
+    parsed = None
+    raw_value = uploaded_file.getvalue() if uploaded_file is not None else None
+    if raw_value is None and pasted_json.strip():
+        raw_value = pasted_json.strip()
+    if raw_value:
+        try:
+            parsed = parse_service_account_json(raw_value)
+            st.success("Google key ready")
+        except ValueError as exc:
+            if uploaded_file is not None or pasted_json.rstrip().endswith("}"):
+                st.error(str(exc))
+
+    return uploaded_file, pasted_json, parsed, replacing
 
 
 def _service_account_from_form(uploaded_file, pasted_json, current_config):
@@ -110,6 +154,34 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             key=f"{group_slug}_setup_method",
         )
         automatic_setup = setup_method == "Create everything"
+
+    (
+        uploaded_file,
+        pasted_json,
+        pending_service_account,
+        replacing_service_account,
+    ) = _render_google_key_inputs(group_slug, current_service_account)
+    if automatic_setup:
+        st.markdown("#### 2. Drive workspace")
+        st.link_button(
+            "Open Google Drive",
+            GOOGLE_DRIVE_URL,
+            width="stretch",
+        )
+        if pending_service_account:
+            st.caption("Share the workspace folder with this address:")
+            st.code(pending_service_account["client_email"], language=None)
+        else:
+            st.caption("Paste the Google key above to reveal the sharing address.")
+    elif pending_service_account and current.get("workspace_folder_id"):
+        st.caption("Share the existing workspace with this address:")
+        st.code(pending_service_account["client_email"], language=None)
+        st.link_button(
+            "Open existing workspace",
+            "https://drive.google.com/drive/folders/"
+            + str(current["workspace_folder_id"]),
+            width="stretch",
+        )
 
     form_key = f"{group_slug}_{'setup' if setup_mode else 'settings'}"
     with st.form(form_key):
@@ -179,17 +251,6 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 "Slides template URL or ID",
                 value=str(current.get("slides_template_id", "")),
             )
-        uploaded_file = st.file_uploader(
-            "Service-account JSON key",
-            type=["json"],
-            help="Upload only when setting up or replacing the service account.",
-        )
-        pasted_json = st.text_area(
-            "Or paste service-account JSON",
-            height=120,
-            placeholder='{"type": "service_account", ...}',
-        )
-
         presenter_change = num_presenters != group["num_presenters"]
         migration_confirmed = True
         if not setup_mode:
@@ -214,6 +275,12 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         return False
 
     try:
+        if (
+            replacing_service_account
+            and uploaded_file is None
+            and not pasted_json.strip()
+        ):
+            raise ValueError("Upload or paste the new Google key")
         service_account = _service_account_from_form(
             uploaded_file, pasted_json, current
         )

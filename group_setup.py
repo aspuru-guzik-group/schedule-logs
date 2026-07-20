@@ -20,6 +20,8 @@ SPREADSHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet"
 PRESENTATION_MIME_TYPE = "application/vnd.google-apps.presentation"
 MANAGED_PROPERTY_GROUP = "matterScheduleGroup"
 MANAGED_PROPERTY_ROLE = "matterScheduleRole"
+CLOUD_KEY_BEGIN_MARKER = "---BEGIN JSON---"
+CLOUD_KEY_END_MARKER = "---END JSON---"
 SERVICE_ACCOUNT_FIELDS = (
     "type",
     "project_id",
@@ -77,6 +79,14 @@ def parse_service_account_json(value):
     try:
         if isinstance(value, bytes):
             value = value.decode("utf-8")
+        if (
+            isinstance(value, str)
+            and CLOUD_KEY_BEGIN_MARKER in value
+            and CLOUD_KEY_END_MARKER in value
+        ):
+            value = value.split(CLOUD_KEY_BEGIN_MARKER, 1)[1].split(
+                CLOUD_KEY_END_MARKER, 1
+            )[0]
         data = json.loads(value) if isinstance(value, str) else value
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"Invalid service-account JSON: {exc}") from exc
