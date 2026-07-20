@@ -191,6 +191,11 @@ enables the required APIs, and prints the JSON key for pasting back into the app
 After the key is pasted, the app extracts and displays its `client_email` next to
 the Google Drive workspace link.
 
+Submitted setup values are stored as a private draft before Google validation.
+Failed validation and application deployments therefore preserve the key, URLs,
+meeting settings, and selected setup mode for the next retry. The draft does not
+enable the subgroup and is cleared after validation succeeds.
+
 Use a Shared Drive workspace folder when possible. The Shared Drive owns its
 files, so they remain available when a subgroup lead or service account changes.
 For a handover, grant the new service account access to the existing workspace

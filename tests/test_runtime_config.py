@@ -15,6 +15,27 @@ from runtime_config import (
 
 
 class RuntimeConfigTest(unittest.TestCase):
+    def test_setup_draft_does_not_mark_group_ready(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "groups.json"
+            save_group_runtime_config(
+                "elagente",
+                {
+                    "setup_draft": {
+                        "organizer_name": "Organizer",
+                        "folder_id": "folder",
+                        "slides_folder_id": "slides-folder",
+                        "slides_template_id": "template",
+                        "spreadsheet_id": "sheet",
+                        "encryption_key": "key",
+                        "gcp_service_account": {"type": "service_account"},
+                    }
+                },
+                path,
+            )
+
+            self.assertFalse(is_runtime_group_ready("elagente", path))
+
     def test_atomic_config_is_private_and_merges_updates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "private" / "groups.json"

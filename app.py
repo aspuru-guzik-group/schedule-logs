@@ -10,8 +10,7 @@ import admin_ui
 from config import GROUPS, get_group_config, get_presenter_cols
 from auth import require_auth
 
-
-GROUP_CALENDAR_URL = (
+CALENDAR_URL = (
     "https://calendar.google.com/calendar/embed?"
     "src=k9494ibh4l1fgfm9q8fmat79ek%40group.calendar.google.com&"
     "ctz=America%2FToronto"
@@ -98,6 +97,7 @@ if not group_slug or group_slug not in GROUPS:
         st.image("logo.png", width=120)
         st.markdown("## The Matter Lab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
+        st.link_button("Open calendar", CALENDAR_URL, width="content")
         st.write("")
         st.markdown("**Select a subgroup meeting:**")
         st.write("")
@@ -116,13 +116,6 @@ if not group_slug or group_slug not in GROUPS:
                 st.query_params["group"] = slug
                 st.rerun()
 
-    st.write("---")
-    st.subheader("Group Calendar")
-    st.link_button(
-        "Open group calendar",
-        GROUP_CALENDAR_URL,
-        width="stretch",
-    )
     st.stop()
 
 ###############################################

@@ -14,11 +14,17 @@ class DynamicGroupConfigTest(unittest.TestCase):
             with self.subTest(slug=slug):
                 self.assertTrue(GROUPS[slug]["self_service_setup"])
 
-    def test_robotics_group_uses_robot_face_and_editable_presenter_default(self):
+    def test_el_agente_uses_supplied_default_slides_template(self):
+        self.assertIn(
+            "1Gjpm344FZtayS9QCr5iPQI_pI1XZOfQ5bU4uoZ8o7d4",
+            GROUPS["elagente"]["default_slides_template_url"],
+        )
+
+    def test_robotics_group_uses_gear_and_editable_presenter_default(self):
         robotics = GROUPS["robotics"]
 
         self.assertEqual(robotics["display_name"], "Robotics Subgroup")
-        self.assertEqual(robotics["emoji"], "🤖")
+        self.assertEqual(robotics["emoji"], "⚙️")
         self.assertEqual(robotics["num_presenters"], 1)
 
     def test_runtime_presenter_mode_and_schedule_settings_override_defaults(self):

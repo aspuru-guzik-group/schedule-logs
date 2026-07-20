@@ -42,6 +42,10 @@ GROUPS = {
         "presentation_duration": 20,
         "email_subject": "[Confirmation Required] El Agente Subgroup",
         "meeting_title": "El Agente Subgroup Meeting",
+        "default_slides_template_url": (
+            "https://docs.google.com/presentation/d/"
+            "1Gjpm344FZtayS9QCr5iPQI_pI1XZOfQ5bU4uoZ8o7d4/edit"
+        ),
         "self_service_setup": True,
     },
     "drugdiscovery": {
@@ -68,7 +72,7 @@ GROUPS = {
     "robotics": {
         "display_name": "Robotics Subgroup",
         "short_name": "Robotics",
-        "emoji": "🤖",
+        "emoji": "⚙️",
         "num_presenters": 1,
         "meeting_day": "wednesday",
         "presentation_duration": 50,

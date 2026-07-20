@@ -136,22 +136,37 @@ def _service_account_from_form(uploaded_file, pasted_json, current_config):
 
 def render_group_configuration_form(group_slug, group, setup_mode=False):
     runtime = get_group_runtime_config(group_slug)
+    setup_draft = runtime.get("setup_draft", {}) if setup_mode else {}
     current = gu.get_group_connection_config(group_slug)
     current.update(runtime)
+    if setup_draft:
+        current.update(setup_draft)
     current_service_account = current.get("gcp_service_account", {})
 
     if current_service_account.get("client_email"):
+        account_label = (
+            "Saved setup service account"
+            if setup_draft
+            else "Current service account"
+        )
         st.caption(
-            f"Current service account: `{current_service_account['client_email']}`"
+            f"{account_label}: `{current_service_account['client_email']}`"
         )
 
     automatic_setup = False
+    setup_method = "Connect existing"
     if setup_mode:
+        default_setup_method = setup_draft.get(
+            "setup_method", "Create everything"
+        )
+        if default_setup_method not in ("Create everything", "Connect existing"):
+            default_setup_method = "Create everything"
         setup_method = st.segmented_control(
             "Google resources",
             options=["Create everything", "Connect existing"],
-            default="Create everything",
+            default=default_setup_method,
             selection_mode="single",
+            required=True,
             key=f"{group_slug}_setup_method",
         )
         automatic_setup = setup_method == "Create everything"
@@ -162,6 +177,8 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         pending_service_account,
         replacing_service_account,
     ) = _render_google_key_inputs(group_slug, current_service_account)
+    if pending_service_account is None and setup_draft:
+        pending_service_account = current_service_account
     if automatic_setup:
         st.markdown("#### 2. Drive workspace")
         st.link_button(
@@ -194,24 +211,33 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         num_presenters = st.segmented_control(
             "Presenters per meeting",
             options=[1, 2],
-            default=group["num_presenters"],
+            default=int(current.get("num_presenters", group["num_presenters"])),
             format_func=lambda value: f"{value} presenter"
             if value == 1
             else f"{value} presenters",
             required=True,
         )
         days = list(DAY_MAP)
+        current_meeting_day = str(
+            current.get("meeting_day", group["meeting_day"])
+        )
+        if current_meeting_day not in days:
+            current_meeting_day = group["meeting_day"]
         meeting_day = st.selectbox(
             "Meeting day",
             options=days,
-            index=days.index(group["meeting_day"]),
+            index=days.index(current_meeting_day),
             format_func=str.title,
         )
         presentation_duration = st.number_input(
             "Minutes per presenter",
             min_value=5,
             max_value=180,
-            value=int(group["presentation_duration"]),
+            value=int(
+                current.get(
+                    "presentation_duration", group["presentation_duration"]
+                )
+            ),
             step=5,
         )
         zoom_link = st.text_input(
@@ -226,6 +252,12 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             )
             source_template = st.text_input(
                 "Source Slides template URL or ID (optional)",
+                value=str(
+                    current.get(
+                        "source_template",
+                        group.get("default_slides_template_url", ""),
+                    )
+                ),
                 placeholder=DEFAULT_SLIDES_TEMPLATE_URL,
                 help="Leave blank to copy the Matter Lab ML template.",
             )
@@ -250,7 +282,12 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
             )
             slides_template_id = st.text_input(
                 "Slides template URL or ID",
-                value=str(current.get("slides_template_id", "")),
+                value=str(
+                    current.get(
+                        "slides_template_id",
+                        group.get("default_slides_template_url", ""),
+                    )
+                ),
             )
         presenter_change = num_presenters != group["num_presenters"]
         migration_confirmed = True
@@ -268,13 +305,6 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
     if not submitted:
         return False
 
-    if not organizer_name.strip():
-        st.error("Organizer name is required")
-        return False
-    if presenter_change and not migration_confirmed:
-        st.error("Confirm the Schedule tab backup and migration")
-        return False
-
     try:
         if (
             replacing_service_account
@@ -285,6 +315,27 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
         service_account = _service_account_from_form(
             uploaded_file, pasted_json, current
         )
+        if setup_mode:
+            draft = {
+                "setup_method": setup_method,
+                "organizer_name": organizer_name.strip(),
+                "zoom_link": zoom_link.strip(),
+                "num_presenters": int(num_presenters),
+                "meeting_day": meeting_day,
+                "presentation_duration": int(presentation_duration),
+                "workspace_folder_id": workspace_folder,
+                "source_template": source_template,
+                "spreadsheet_id": spreadsheet_id,
+                "folder_id": folder_id,
+                "slides_folder_id": slides_folder_id,
+                "slides_template_id": slides_template_id,
+                "gcp_service_account": service_account,
+            }
+            save_group_runtime_config(group_slug, {"setup_draft": draft})
+        if not organizer_name.strip():
+            raise ValueError("Organizer name is required")
+        if presenter_change and not migration_confirmed:
+            raise ValueError("Confirm the Schedule tab backup and migration")
         updated_group = {
             **group,
             "num_presenters": int(num_presenters),
@@ -328,6 +379,7 @@ def render_group_configuration_form(group_slug, group, setup_mode=False):
                 "presentation_duration": int(presentation_duration),
                 "encryption_key": current.get("encryption_key")
                 or secrets.token_urlsafe(32),
+                "setup_draft": {},
             }
             save_group_runtime_config(group_slug, updates)
     except Exception as exc:
