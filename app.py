@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import datetime
 import time
@@ -112,18 +111,12 @@ if not group_slug or group_slug not in GROUPS:
 
     st.write("---")
     st.subheader("Group Calendar")
-    components.html(
-        """
-        <iframe
-            src="https://calendar.google.com/calendar/embed?src=k9494ibh4l1fgfm9q8fmat79ek%40group.calendar.google.com&amp;ctz=America%2FToronto"
-            title="Matter Lab group calendar"
-            style="border: 0; width: 100%; height: 600px;"
-            frameborder="0"
-            scrolling="no">
-        </iframe>
-        """,
-        height=610,
-        scrolling=False,
+    st.iframe(
+        "https://calendar.google.com/calendar/embed?"
+        "src=k9494ibh4l1fgfm9q8fmat79ek%40group.calendar.google.com&"
+        "ctz=America%2FToronto",
+        width="stretch",
+        height=600,
     )
     st.stop()
 
