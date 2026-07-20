@@ -491,7 +491,33 @@ else:
                 mask = mask | df[c].str.contains(search_name, case=False, na=False)
             df = df[mask]
 
-        if df.empty:
+        if df.empty and admin_mode:
+            st.info(
+                "You are in admin mode. Add the first meeting to start the schedule."
+            )
+            if st.button("Add Row", key="add_first_schedule_row"):
+                updated_df = df_full.copy()
+                after_date = today
+                if not updated_df.empty:
+                    latest_date = updated_df["Date"].max()
+                    if latest_date > after_date:
+                        after_date = latest_date
+                next_day = fns.get_next_day_of_week(
+                    after_date, group["meeting_day"]
+                )
+                new_row = {
+                    column: next_day if column == "Date" else "EMPTY"
+                    for column in updated_df.columns
+                }
+                updated_df = pd.concat(
+                    [updated_df, pd.DataFrame([new_row])], ignore_index=True
+                )
+                updated_df["Date"] = updated_df["Date"].astype(str)
+                gu.save_schedule_df(updated_df, group_slug)
+                refresh_main()
+                st.rerun()
+            st.write("No matching rows.")
+        elif df.empty:
             st.write("No matching rows.")
         else:
             if admin_mode:

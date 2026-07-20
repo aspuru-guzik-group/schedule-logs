@@ -72,7 +72,7 @@ def get_schedule_df(group_slug):
     import pandas as pd
 
     data = ws.get_all_records()
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data, columns=ws.row_values(1))
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
     return df
