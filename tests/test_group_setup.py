@@ -6,6 +6,7 @@ from group_setup import (
     FOLDER_MIME_TYPE,
     PRESENTATION_MIME_TYPE,
     SPREADSHEET_MIME_TYPE,
+    _headers_match_ignoring_whitespace,
     _migrate_schedule,
     missing_slide_placeholders,
     provision_google_resources,
@@ -127,6 +128,22 @@ class FakeSpreadsheet:
 
 
 class GroupSetupTest(unittest.TestCase):
+    def test_headers_allow_only_surrounding_whitespace_repair(self):
+        expected = ["Date", "Title", "Description", "PDF_Name", "PDF_Link"]
+
+        self.assertTrue(
+            _headers_match_ignoring_whitespace(
+                ["Date", "Title", "Description", "PDF_Name", "PDF_Link "],
+                expected,
+            )
+        )
+        self.assertFalse(
+            _headers_match_ignoring_whitespace(
+                ["Date", "Title", "Description", "PDF Name", "PDF_Link"],
+                expected,
+            )
+        )
+
     def test_initial_setup_allows_supported_schedule_layout_migration(self):
         self.assertTrue(should_migrate_schedule(True, False, True))
         self.assertTrue(should_migrate_schedule(True, False, False))

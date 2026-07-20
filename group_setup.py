@@ -159,6 +159,10 @@ def _schedule_headers(num_presenters):
     return ["Date", *[f"Presenter {index + 1}" for index in range(num_presenters)]]
 
 
+def _headers_match_ignoring_whitespace(current_headers, expected_headers):
+    return [header.strip() for header in current_headers] == expected_headers
+
+
 def should_migrate_schedule(
     initial_setup, presenter_mode_changed, migration_confirmed
 ):
@@ -499,6 +503,11 @@ def initialize_google_resources(
             messages.append(f"Added headers to {title} tab")
         elif current_headers == expected_headers:
             messages.append(f"Verified {title} tab")
+        elif _headers_match_ignoring_whitespace(
+            current_headers, expected_headers
+        ):
+            worksheet.update(values=[expected_headers], range_name="A1")
+            messages.append(f"Repaired whitespace in {title} headers")
         elif title == "Schedule" and allow_schedule_migration:
             backup_title = _migrate_schedule(
                 spreadsheet, worksheet, expected_headers
