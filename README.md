@@ -6,7 +6,9 @@ Unified schedule app for all MatterLab subgroup meetings at `schedule.matter.tor
 
 ### 1. Create a GCP service account
 
-Each subgroup needs its own Google Cloud service account to access Sheets, Drive, and Slides.
+Each subgroup currently uses its own Google Cloud service account for the Sheet.
+Subgroups with lead-owned Drive OAuth enabled use the connected lead account for
+generated Slides and PDF uploads; legacy subgroups use a Shared Drive.
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
 2. Create a new project (or use an existing one) — the `project_id` in your secrets comes from here
@@ -54,10 +56,12 @@ Add these tabs (exact names):
 | `Materials` | `Date`, `Title`, `Description`, `PDF_Name`, `PDF_Link` |
 | `Slides` | `Date`, `Presentation_ID`, `Presentation_Link` |
 
-### 3. Create Shared Drive folders
+### 3. Create Drive folders
 
-Create two folders inside a Google Shared Drive and grant the service account
-`client_email` **Content manager** access:
+For legacy subgroups, create two folders inside a Google Shared Drive and grant
+the service account `client_email` **Content manager** access. For an
+OAuth-enabled subgroup, connect the lead's Google account in Admin Settings;
+the folders may remain in My Drive.
 
 - **Materials folder** — for uploaded PDFs → this is `folder_id`
 - **Slides folder** — for generated slide decks → this is `slides_folder_id`
@@ -180,12 +184,11 @@ directly and forge that proxy header.
 
 Every subgroup uses the same self-service configuration and always appears as a
 normal subgroup entry. When one is not configured, opening it shows the admin
-setup screen instead of a schedule. In the default setup path, the admin uploads
-or pastes a service-account JSON key and provides one Drive workspace folder
-shared with that service account.
-The app creates the Sheet and required tabs, materials folder, generated-slides
-folder, and a subgroup-specific copy of the ML Slides template before enabling the
-subgroup. A manual path remains available to connect existing resources.
+setup screen instead of a schedule. For OAuth-enabled groups, the lead connects
+their Google account and the app creates the workspace folder, Sheet and required
+tabs, materials folder, generated-slides folder, and Slides template in their My
+Drive. A manual path remains available to connect existing resources. Legacy
+groups retain the Shared Drive setup path.
 
 The setup page links directly to Google Cloud Shell and provides one copyable
 command. That command creates a separate Google Cloud project and service account,
@@ -198,13 +201,17 @@ Failed validation and application deployments therefore preserve the key, URLs,
 meeting settings, and selected setup mode for the next retry. The draft does not
 enable the subgroup and is cleared after validation succeeds.
 
-Use a Shared Drive workspace folder. Service accounts have no Drive storage and
-cannot create generated Slides or uploaded PDFs in My Drive. The Shared Drive
-owns its files, so they also remain available when a subgroup lead or service
-account changes. Generated files inherit the Shared Drive's access settings.
-For a handover, grant the new service account access to the existing workspace
-folder, then upload its JSON key in the subgroup's admin settings; the stored
-resource IDs do not need to change.
+Service accounts have no personal Drive storage. OAuth-enabled groups therefore
+create generated Slides and uploaded PDFs as the connected lead, using that
+account's My Drive quota. During a handover, the new lead reconnects from Admin
+Settings; the stored resource IDs and deployment do not change, provided the new
+lead can access the existing resources.
+
+The first OAuth-enabled group also shows a one-time operator setup when no site
+OAuth client exists. Create a Google OAuth client with application type **Web**,
+add the exact redirect URI displayed by the app, and upload the downloaded JSON.
+After that, subgroup leads only use **Connect Google Drive**. The OAuth client and
+per-group refresh tokens are stored in `data/groups.json`, which is mode `0600`.
 
 Meeting day, presentation duration, organizer, Zoom link, and one/two-presenter
 mode are editable in the same UI. Changing presenter mode creates a timestamped

@@ -10,6 +10,18 @@ except ModuleNotFoundError:
 
 @unittest.skipIf(auth is None, "application dependencies are not installed")
 class AuthNetworkTest(unittest.TestCase):
+    def test_google_drive_callback_is_not_treated_as_slack_callback(self):
+        self.assertTrue(
+            auth._is_google_drive_oauth_callback(
+                {"code": "google-code", "state": "schedule-drive:elagente:nonce"}
+            )
+        )
+        self.assertFalse(
+            auth._is_google_drive_oauth_callback(
+                {"code": "slack-code", "state": "slack-state"}
+            )
+        )
+
     def test_auth_uses_nginx_real_ip(self):
         fake_streamlit = SimpleNamespace(
             context=SimpleNamespace(headers={"X-Real-IP": "10.21.10.221"})

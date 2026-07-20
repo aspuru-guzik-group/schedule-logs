@@ -222,7 +222,9 @@ def _require_shared_drive_folder(metadata, label):
         )
 
 
-def _get_workspace_folder(drive, workspace_folder_id):
+def _get_workspace_folder(
+    drive, workspace_folder_id, require_shared_drive=True
+):
     workspace = (
         drive.files()
         .get(
@@ -239,7 +241,8 @@ def _get_workspace_folder(drive, workspace_folder_id):
         raise ValueError("The workspace folder is in the trash")
     if workspace.get("mimeType") != FOLDER_MIME_TYPE:
         raise ValueError("The workspace location must be a Google Drive folder")
-    _require_shared_drive_folder(workspace, "workspace folder")
+    if require_shared_drive:
+        _require_shared_drive_folder(workspace, "workspace folder")
     if not workspace.get("capabilities", {}).get("canAddChildren"):
         raise ValueError(
             "The service account needs Content manager access to the "
@@ -320,6 +323,7 @@ def provision_google_resources(
     service_account,
     source_template="",
     _drive=None,
+    allow_my_drive=False,
 ):
     """Create or reuse all subgroup resources inside one Drive folder."""
     service_account = validate_service_account(service_account)
@@ -338,7 +342,11 @@ def provision_google_resources(
     else:
         drive = _drive
 
-    workspace = _get_workspace_folder(drive, workspace_folder_id)
+    workspace = _get_workspace_folder(
+        drive,
+        workspace_folder_id,
+        require_shared_drive=not allow_my_drive,
+    )
 
     source_template_id = (
         extract_resource_id(source_template, "presentation")
@@ -357,7 +365,7 @@ def provision_google_resources(
     if source.get("trashed") or source.get("mimeType") != PRESENTATION_MIME_TYPE:
         raise ValueError("The source Slides template is unavailable or invalid")
     if not source.get("capabilities", {}).get("canCopy"):
-        raise ValueError("The service account cannot copy the source Slides template")
+        raise ValueError("The connected Google account cannot copy the Slides template")
 
     display_name = group_config["display_name"]
     drive_id = workspace.get("driveId")
@@ -412,59 +420,79 @@ def provision_google_resources(
     return values, messages
 
 
-def provision_google_storage_folders(
+def _ensure_service_account_sheet_access(drive, spreadsheet_id, email):
+    permissions = (
+        drive.permissions()
+        .list(
+            fileId=spreadsheet_id,
+            fields="permissions(id,emailAddress,role,type)",
+            supportsAllDrives=True,
+        )
+        .execute()
+        .get("permissions", [])
+    )
+    if any(
+        permission.get("emailAddress", "").lower() == email.lower()
+        and permission.get("role") in ("owner", "writer")
+        for permission in permissions
+    ):
+        return False
+    (
+        drive.permissions()
+        .create(
+            fileId=spreadsheet_id,
+            body={"type": "user", "role": "writer", "emailAddress": email},
+            sendNotificationEmail=False,
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    return True
+
+
+def provision_google_resources_in_my_drive(
     group_slug,
     group_config,
-    workspace_folder,
     service_account,
+    source_template="",
     _drive=None,
 ):
-    """Create or reuse writable Materials and Slides folders in a Shared Drive."""
+    """Create or reuse a complete subgroup workspace in the lead's My Drive."""
     service_account = validate_service_account(service_account)
-    workspace_folder_id = extract_resource_id(workspace_folder, "folder")
-
     if _drive is None:
-        try:
-            from google.oauth2.service_account import Credentials
-            from googleapiclient.discovery import build
-        except ImportError as exc:
-            raise RuntimeError("Google API dependencies are unavailable") from exc
-        credentials = Credentials.from_service_account_info(
-            service_account, scopes=SCOPES
-        )
-        drive = build("drive", "v3", credentials=credentials)
-    else:
-        drive = _drive
+        raise ValueError("Connect the subgroup lead's Google Drive account first")
 
-    workspace = _get_workspace_folder(drive, workspace_folder_id)
     display_name = group_config["display_name"]
-    specifications = (
-        (
-            "folder_id",
-            "materials",
-            f"{display_name} Materials",
-        ),
-        (
-            "slides_folder_id",
-            "generated_slides",
-            f"{display_name} Generated Slides",
-        ),
+    workspace, created = _get_or_create_managed_resource(
+        _drive,
+        "root",
+        group_slug,
+        "workspace",
+        f"{display_name} Workspace",
+        FOLDER_MIME_TYPE,
     )
-    values = {"workspace_folder_id": workspace_folder_id}
-    messages = [f"Verified Shared Drive workspace: {workspace['name']}"]
-    for key, role, name in specifications:
-        resource, created = _get_or_create_managed_resource(
-            drive,
-            workspace_folder_id,
-            group_slug,
-            role,
-            name,
-            FOLDER_MIME_TYPE,
-            drive_id=workspace["driveId"],
-        )
-        values[key] = resource["id"]
-        action = "Created" if created else "Reused"
-        messages.append(f"{action} {resource['name']}")
+    values, messages = provision_google_resources(
+        group_slug,
+        group_config,
+        workspace["id"],
+        service_account,
+        source_template=source_template,
+        _drive=_drive,
+        allow_my_drive=True,
+    )
+    messages.insert(
+        0,
+        f"{'Created' if created else 'Reused'} {workspace['name']}",
+    )
+    permission_created = _ensure_service_account_sheet_access(
+        _drive,
+        values["spreadsheet_id"],
+        service_account["client_email"],
+    )
+    messages.append(
+        ("Shared" if permission_created else "Verified access to")
+        + " the Schedule Sheet for the app"
+    )
     return values, messages
 
 
@@ -473,6 +501,9 @@ def initialize_google_resources(
     values,
     service_account,
     allow_schedule_migration=False,
+    allow_my_drive=False,
+    _drive=None,
+    _slides=None,
 ):
     """Validate access, create Sheet tabs, and optionally migrate presenter columns."""
     try:
@@ -492,7 +523,7 @@ def initialize_google_resources(
     )
     messages = [f"Verified Google Sheet: {spreadsheet.title}"]
 
-    drive = build("drive", "v3", credentials=credentials)
+    drive = _drive or build("drive", "v3", credentials=credentials)
     resources = (
         (
             "materials folder",
@@ -533,16 +564,16 @@ def initialize_google_resources(
                 f"The {label} has type {metadata.get('mimeType')}; "
                 f"expected {expected_mime_type}"
             )
-        if label in ("materials folder", "slides folder"):
+        if label in ("materials folder", "slides folder") and not allow_my_drive:
             _require_shared_drive_folder(metadata, label)
         if not metadata.get("capabilities", {}).get(required_capability):
             raise ValueError(
-                f"The service account lacks {required_capability} access to "
+                f"Google access lacks {required_capability} permission for "
                 f"the {label}: {metadata['name']}"
             )
         messages.append(f"Verified {label}: {metadata['name']}")
 
-    slides = build("slides", "v1", credentials=credentials)
+    slides = _slides or build("slides", "v1", credentials=credentials)
     presentation = (
         slides.presentations()
         .get(presentationId=values["slides_template_id"])

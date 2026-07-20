@@ -43,7 +43,7 @@ def _config_path(path=None):
 
 
 def _empty_data():
-    return {"version": CONFIG_VERSION, "groups": {}}
+    return {"version": CONFIG_VERSION, "groups": {}, "google_oauth_client": {}}
 
 
 def load_runtime_data(path=None):
@@ -63,6 +63,12 @@ def get_group_runtime_config(group_slug, path=None):
     with _CONFIG_LOCK:
         data = load_runtime_data(path)
         return copy.deepcopy(data["groups"].get(group_slug, {}))
+
+
+def get_google_oauth_client(path=None):
+    with _CONFIG_LOCK:
+        data = load_runtime_data(path)
+        return copy.deepcopy(data.get("google_oauth_client", {}))
 
 
 def save_group_runtime_config(group_slug, updates, path=None):
@@ -93,6 +99,34 @@ def save_group_runtime_config(group_slug, updates, path=None):
             temp_path.unlink(missing_ok=True)
             raise
         return copy.deepcopy(current)
+
+
+def save_google_oauth_client(client_config, path=None):
+    config_path = _config_path(path)
+    with _CONFIG_LOCK:
+        data = load_runtime_data(config_path)
+        data["version"] = CONFIG_VERSION
+        data["google_oauth_client"] = copy.deepcopy(client_config)
+
+        config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(config_path.parent, 0o700)
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{config_path.name}.", dir=config_path.parent
+        )
+        temp_path = Path(temp_name)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, config_path)
+            os.chmod(config_path, 0o600)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+        return copy.deepcopy(data["google_oauth_client"])
 
 
 def is_runtime_group_ready(group_slug, path=None):

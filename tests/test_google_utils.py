@@ -28,9 +28,37 @@ class GoogleUtilsTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             google_utils.DriveStorageConfigurationError,
-            "Shared Drive workspace",
+            "Connect the subgroup lead",
         ):
             google_utils._execute_drive_write(FailingRequest())
+
+    def test_elagente_drive_uses_connected_user_credentials(self):
+        credentials = object()
+        service = object()
+        with patch.object(
+            google_utils.google_drive_oauth,
+            "get_user_credentials",
+            return_value=credentials,
+        ) as get_credentials, patch.object(
+            google_utils, "build", return_value=service
+        ) as build:
+            self.assertIs(google_utils.get_drive_service("elagente"), service)
+
+        get_credentials.assert_called_once_with("elagente")
+        build.assert_called_once_with("drive", "v3", credentials=credentials)
+
+    def test_missing_elagente_connection_is_actionable(self):
+        with patch.object(
+            google_utils.google_drive_oauth,
+            "get_user_credentials",
+            side_effect=google_utils.google_drive_oauth.GoogleDriveOAuthError(
+                "connect first"
+            ),
+        ):
+            with self.assertRaisesRegex(
+                google_utils.DriveOAuthConnectionError, "connect first"
+            ):
+                google_utils.get_drive_service("elagente")
 
     def test_empty_schedule_preserves_sheet_headers(self):
         class EmptySchedule:

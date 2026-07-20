@@ -49,6 +49,7 @@ GROUPS = {
             "https://docs.google.com/presentation/d/"
             "1Gjpm344FZtayS9QCr5iPQI_pI1XZOfQ5bU4uoZ8o7d4/edit"
         ),
+        "google_drive_oauth_enabled": True,
         "self_service_setup": True,
     },
     "drugdiscovery": {

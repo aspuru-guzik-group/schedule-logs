@@ -14,6 +14,11 @@ from streamlit_cookies_controller import CookieController
 from network_access import is_ethernet_client
 
 COOKIE_NAME = "schedule_auth"
+GOOGLE_DRIVE_STATE_PREFIX = "schedule-drive:"
+
+
+def _is_google_drive_oauth_callback(params):
+    return str(params.get("state", "")).startswith(GOOGLE_DRIVE_STATE_PREFIX)
 
 
 def _is_ethernet_network():
@@ -143,7 +148,7 @@ def require_auth():
     # 3. Check for OAuth callback
     params = st.query_params
     code = params.get("code")
-    if code:
+    if code and not _is_google_drive_oauth_callback(params):
         with st.spinner("Signing in with Slack..."):
             token_data = _exchange_code(code)
             if token_data:

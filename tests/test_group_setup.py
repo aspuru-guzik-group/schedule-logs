@@ -11,7 +11,7 @@ from group_setup import (
     _require_shared_drive_folder,
     missing_slide_placeholders,
     provision_google_resources,
-    provision_google_storage_folders,
+    provision_google_resources_in_my_drive,
     required_slide_placeholders,
     parse_service_account_json,
     should_migrate_schedule,
@@ -68,6 +68,15 @@ class FakeDriveFiles:
                     "capabilities": {"canCopy": True},
                 }
             )
+        for resource in self.resources:
+            if resource.get("id") == fileId:
+                value = dict(resource)
+                value["capabilities"] = {
+                    "canAddChildren": resource.get("mimeType") == FOLDER_MIME_TYPE,
+                    "canCopy": True,
+                    "canEdit": True,
+                }
+                return FakeRequest(value)
         raise AssertionError(f"Unexpected file lookup: {fileId}")
 
     def list(self, *, q, **_kwargs):
@@ -79,7 +88,10 @@ class FakeDriveFiles:
         return FakeRequest({"files": matches})
 
     def create(self, *, body, **_kwargs):
-        resource = {**body, "id": f"created-{len(self.resources) + 1}"}
+        resource = {
+            **body,
+            "id": f"created-resource-{len(self.resources) + 1}",
+        }
         self.resources.append(resource)
         return FakeRequest(resource)
 
@@ -87,7 +99,7 @@ class FakeDriveFiles:
         self.copied_from.append(fileId)
         resource = {
             **body,
-            "id": f"created-{len(self.resources) + 1}",
+            "id": f"created-resource-{len(self.resources) + 1}",
             "mimeType": PRESENTATION_MIME_TYPE,
         }
         self.resources.append(resource)
@@ -97,9 +109,26 @@ class FakeDriveFiles:
 class FakeDrive:
     def __init__(self, workspace_drive_id="shared_drive_12345"):
         self.files_api = FakeDriveFiles(workspace_drive_id)
+        self.permissions_api = FakePermissions()
 
     def files(self):
         return self.files_api
+
+    def permissions(self):
+        return self.permissions_api
+
+
+class FakePermissions:
+    def __init__(self):
+        self.values = []
+
+    def list(self, **_kwargs):
+        return FakeRequest({"permissions": list(self.values)})
+
+    def create(self, *, body, **_kwargs):
+        permission = {**body, "id": f"permission-{len(self.values) + 1}"}
+        self.values.append(permission)
+        return FakeRequest(permission)
 
 
 class FakeWorksheet:
@@ -149,6 +178,35 @@ class GroupSetupTest(unittest.TestCase):
     def test_writable_destinations_must_be_in_a_shared_drive(self):
         with self.assertRaisesRegex(ValueError, "materials folder.*My Drive"):
             _require_shared_drive_folder({}, "materials folder")
+
+    def test_personal_drive_setup_creates_and_reuses_complete_workspace(self):
+        drive = FakeDrive(workspace_drive_id=None)
+
+        values, messages = provision_google_resources_in_my_drive(
+            "elagente",
+            GROUPS["elagente"],
+            service_account_fixture(),
+            _drive=drive,
+        )
+
+        self.assertEqual(len(drive.files_api.resources), 5)
+        self.assertEqual(len(drive.permissions_api.values), 1)
+        self.assertEqual(
+            drive.permissions_api.values[0]["emailAddress"],
+            service_account_fixture()["client_email"],
+        )
+        self.assertTrue(any(message.startswith("Created ") for message in messages))
+
+        repeated_values, _ = provision_google_resources_in_my_drive(
+            "elagente",
+            GROUPS["elagente"],
+            service_account_fixture(),
+            _drive=drive,
+        )
+
+        self.assertEqual(repeated_values, values)
+        self.assertEqual(len(drive.files_api.resources), 5)
+        self.assertEqual(len(drive.permissions_api.values), 1)
 
     def test_headers_allow_only_surrounding_whitespace_repair(self):
         expected = ["Date", "Title", "Description", "PDF_Name", "PDF_Link"]
@@ -230,25 +288,6 @@ class GroupSetupTest(unittest.TestCase):
             sum(message.startswith("Reused ") for message in repeated_messages),
             4,
         )
-
-    def test_storage_repair_creates_only_writable_folders(self):
-        drive = FakeDrive()
-
-        values, messages = provision_google_storage_folders(
-            "robotics",
-            GROUPS["robotics"],
-            "workspace_folder_12345",
-            service_account_fixture(),
-            _drive=drive,
-        )
-
-        self.assertEqual(values["workspace_folder_id"], "workspace_folder_12345")
-        self.assertEqual(len(drive.files_api.resources), 2)
-        self.assertEqual(
-            set(values),
-            {"workspace_folder_id", "folder_id", "slides_folder_id"},
-        )
-        self.assertTrue(messages[0].startswith("Verified Shared Drive"))
 
     def test_one_to_two_presenter_migration_keeps_existing_presenter(self):
         spreadsheet = FakeSpreadsheet()

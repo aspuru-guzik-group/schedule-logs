@@ -8,6 +8,7 @@ import funcs as fns
 import google_utils as gu
 import assign_schedule as assign
 import admin_ui
+import google_drive_oauth
 from config import GROUPS, get_group_config, get_presenter_cols
 from auth import require_auth
 
@@ -31,6 +32,37 @@ st.set_page_config(
 # AUTHENTICATION (Slack)
 ###############################################
 user = require_auth()
+
+oauth_state = st.query_params.get("state", "")
+oauth_code = st.query_params.get("code", "")
+if oauth_code and google_drive_oauth.is_drive_oauth_state(oauth_state):
+    redirect_uri = google_drive_oauth.redirect_uri_from_app_url(
+        st.secrets.get("app_url", "http://localhost:8501")
+    )
+    try:
+        connected_group, connection = google_drive_oauth.finish_connection(
+            oauth_code,
+            oauth_state,
+            redirect_uri,
+        )
+    except google_drive_oauth.GoogleDriveOAuthError as exc:
+        st.error(str(exc))
+        if st.button("Back to schedules"):
+            st.query_params.clear()
+            st.rerun()
+        st.stop()
+    st.session_state["drive_oauth_notice"] = (
+        "Google Drive connected"
+        + (f" as {connection['email']}" if connection.get("email") else "")
+        + "."
+    )
+    st.query_params.clear()
+    st.query_params["group"] = connected_group
+    st.rerun()
+
+drive_oauth_notice = st.session_state.pop("drive_oauth_notice", "")
+if drive_oauth_notice:
+    st.success(drive_oauth_notice)
 
 st.markdown(
     """
@@ -329,9 +361,11 @@ elif "date" in params:
         )
         st.write(f"### Schedule for {datestr}")
         for col in role_cols:
-            if row[col]:
-                ps.append(row[col])
-                st.write(f"##### {col}: {row[col]}")
+            presenter = str(row[col]).strip()
+            if presenter:
+                st.write(f"##### {col}: {presenter}")
+            if presenter and presenter.upper() != "EMPTY":
+                ps.append(presenter)
 
     existing_slide = load_slides_data(selected_date_str, group_slug)
     st.write("")
@@ -345,10 +379,13 @@ elif "date" in params:
             if ps and st.button("Make Slides", key=f"main_slides_{idx}"):
                 try:
                     drive_service = gu.get_drive_service(group_slug)
-                    drive_service.files().get(
-                        fileId=SLIDES_TEMPLATE_ID,
-                        supportsAllDrives=True,
-                    ).execute()
+                    gu.execute_google_request(
+                        drive_service.files().get(
+                            fileId=SLIDES_TEMPLATE_ID,
+                            supportsAllDrives=True,
+                        ),
+                        group_slug=group_slug,
+                    )
                     presentation_id, presentation_link = gu.generate_presentation(
                         selected_date_str,
                         ps,
@@ -358,6 +395,8 @@ elif "date" in params:
                         group_slug=group_slug,
                     )
                 except gu.DriveStorageConfigurationError as exc:
+                    st.error(str(exc))
+                except gu.DriveOAuthConnectionError as exc:
                     st.error(str(exc))
                 except HttpError as exc:
                     st.error(
@@ -440,6 +479,8 @@ elif "date" in params:
                         group_slug,
                     )
                 except gu.DriveStorageConfigurationError as exc:
+                    st.error(str(exc))
+                except gu.DriveOAuthConnectionError as exc:
                     st.error(str(exc))
                 except HttpError as exc:
                     st.error(
@@ -854,6 +895,9 @@ else:
         st.subheader("Admin Settings")
 
         if group.get("self_service_setup", False):
+            if group.get("google_drive_oauth_enabled", False):
+                with st.expander("Google Drive account"):
+                    admin_ui.render_google_drive_connection(group_slug)
             with st.expander("Meeting and Google configuration"):
                 if admin_ui.render_group_configuration_form(
                     group_slug, group

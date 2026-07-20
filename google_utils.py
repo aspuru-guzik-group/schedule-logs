@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaInMemoryUpload
@@ -12,6 +13,8 @@ import smtplib
 import time
 
 from funcs import encrypt_name
+from config import GROUPS
+import google_drive_oauth
 from group_setup import SERVICE_ACCOUNT_FIELDS, parse_service_account_json
 from runtime_config import (
     REQUIRED_INTEGRATION_FIELDS,
@@ -25,13 +28,20 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 DRIVE_STORAGE_CONFIGURATION_MESSAGE = (
-    "Google service accounts cannot create files in My Drive. Open Admin "
-    "Settings > Meeting and Google configuration, paste a folder from Shared "
-    "drives into Shared Drive workspace, and save."
+    "Google service accounts cannot create files in My Drive. Connect the "
+    "subgroup lead's Google Drive account in Admin Settings, then try again."
+)
+DRIVE_OAUTH_CONNECTION_MESSAGE = (
+    "Connect or reconnect the subgroup lead's Google Drive account in "
+    "Admin Settings, then try again."
 )
 
 
 class DriveStorageConfigurationError(RuntimeError):
+    pass
+
+
+class DriveOAuthConnectionError(RuntimeError):
     pass
 
 
@@ -57,16 +67,39 @@ def google_http_error_message(exc):
     return _google_http_error_details(exc)[1]
 
 
-def _execute_drive_write(request):
+def execute_google_request(request, group_slug=None, drive_write=False):
     try:
         return request.execute()
+    except RefreshError as exc:
+        raise DriveOAuthConnectionError(DRIVE_OAUTH_CONNECTION_MESSAGE) from exc
     except HttpError as exc:
         reasons, _ = _google_http_error_details(exc)
-        if "storageQuotaExceeded" in reasons:
+        if drive_write and "storageQuotaExceeded" in reasons:
+            if group_slug and has_drive_oauth(group_slug):
+                message = (
+                    "The connected Google account could not create the file "
+                    "because its Drive storage is full. Free some space or "
+                    "connect a different account in Admin Settings."
+                )
+            else:
+                message = DRIVE_STORAGE_CONFIGURATION_MESSAGE
             raise DriveStorageConfigurationError(
-                DRIVE_STORAGE_CONFIGURATION_MESSAGE
+                message
+            ) from exc
+        if group_slug and is_drive_oauth_enabled(group_slug) and (
+            getattr(exc.resp, "status", None) == 401
+            or reasons.intersection({"authError", "invalidCredentials"})
+        ):
+            raise DriveOAuthConnectionError(
+                DRIVE_OAUTH_CONNECTION_MESSAGE
             ) from exc
         raise
+
+
+def _execute_drive_write(request, group_slug=None):
+    return execute_google_request(
+        request, group_slug=group_slug, drive_write=True
+    )
 
 ###############################################################################
 # Google Sheets & Drive Utilities
@@ -83,6 +116,30 @@ def get_group_connection_config(group_slug):
     elif "gcp_service_account" in legacy:
         merged["gcp_service_account"] = dict(legacy["gcp_service_account"])
     return merged
+
+
+def is_drive_oauth_enabled(group_slug):
+    return bool(
+        GROUPS.get(group_slug, {}).get("google_drive_oauth_enabled", False)
+    )
+
+
+def has_drive_oauth(group_slug):
+    return is_drive_oauth_enabled(group_slug) and google_drive_oauth.has_connection(
+        group_slug
+    )
+
+
+def _get_drive_credentials(group_slug):
+    if is_drive_oauth_enabled(group_slug):
+        try:
+            return google_drive_oauth.get_user_credentials(group_slug)
+        except google_drive_oauth.GoogleDriveOAuthError as exc:
+            raise DriveOAuthConnectionError(str(exc)) from exc
+    service_account_info = _get_service_account_info(group_slug)
+    return Credentials.from_service_account_info(
+        service_account_info, scopes=SCOPES
+    )
 
 
 def is_group_configured(group_slug):
@@ -149,10 +206,7 @@ def save_participants_list(participants, group_slug):
 
 
 def get_drive_service(group_slug):
-    service_account_info = _get_service_account_info(group_slug)
-    credentials = Credentials.from_service_account_info(
-        service_account_info, scopes=SCOPES
-    )
+    credentials = _get_drive_credentials(group_slug)
     return build("drive", "v3", credentials=credentials)
 
 
@@ -171,7 +225,7 @@ def upload_file_to_drive(file_name, file_bytes, mime_type, parent_folder_id=None
             supportsAllDrives=True,
         )
     )
-    uploaded_file = _execute_drive_write(upload_request)
+    uploaded_file = _execute_drive_write(upload_request, group_slug)
     return uploaded_file.get("id"), uploaded_file.get("webViewLink")
 
 
@@ -192,9 +246,7 @@ def delete_material_row(row_index, group_slug):
 
 
 def get_slides_service(group_slug):
-    credentials = Credentials.from_service_account_info(
-        _get_service_account_info(group_slug), scopes=SCOPES
-    )
+    credentials = _get_drive_credentials(group_slug)
     return build("slides", "v1", credentials=credentials)
 
 
@@ -223,7 +275,7 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
             supportsAllDrives=True,
         )
     )
-    copied_file = _execute_drive_write(copy_request)
+    copied_file = _execute_drive_write(copy_request, group_slug)
     presentation_id = copied_file.get("id")
 
     requests = [
@@ -269,9 +321,12 @@ def generate_presentation(date, presenters, template_id, folder_id, meeting_titl
             )
 
     body = {"requests": requests}
-    slides_service.presentations().batchUpdate(
-        presentationId=presentation_id, body=body
-    ).execute()
+    execute_google_request(
+        slides_service.presentations().batchUpdate(
+            presentationId=presentation_id, body=body
+        ),
+        group_slug=group_slug,
+    )
 
     presentation_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
     return presentation_id, presentation_url
