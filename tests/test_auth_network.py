@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 try:
@@ -10,6 +11,28 @@ except ModuleNotFoundError:
 
 @unittest.skipIf(auth is None, "application dependencies are not installed")
 class AuthNetworkTest(unittest.TestCase):
+    def test_slack_authorization_preselects_the_matter_lab_workspace(self):
+        fake_streamlit = SimpleNamespace(
+            secrets={
+                "app_url": "https://schedule.example.test/",
+                "slack": {
+                    "client_id": "client-id",
+                    "client_secret": "client-secret",
+                    "team_id": "T02G0R3HY",
+                },
+            }
+        )
+        with patch.object(auth, "st", fake_streamlit):
+            authorization_url = auth._get_auth_url()
+            config = auth._get_slack_config()
+
+        query = parse_qs(urlparse(authorization_url).query)
+        self.assertEqual(query["team"], ["T02G0R3HY"])
+        self.assertEqual(query["redirect_uri"], ["https://schedule.example.test"])
+        self.assertEqual(
+            config["workspace_url"], "https://aspuru.slack.com"
+        )
+
     def test_google_drive_callback_is_not_treated_as_slack_callback(self):
         self.assertTrue(
             auth._is_google_drive_oauth_callback(

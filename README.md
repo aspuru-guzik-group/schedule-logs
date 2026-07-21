@@ -186,7 +186,9 @@ Computers on the Matter internal wired network (`10.21.0.0/16`) or UofT CS wired
 network (`128.100.0.0/16`) bypass Slack sign-in. All other client addresses use
 the normal Slack authentication flow. Nginx supplies the trusted client address
 through `X-Real-IP`, and Streamlit is bound to localhost so clients cannot connect
-directly and forge that proxy header.
+directly and forge that proxy header. The login page displays
+`aspuru.slack.com`, and the OAuth request includes The Matter Lab team ID so Slack
+preselects the workspace for users who are already signed in there.
 
 ## Self-service subgroup setup
 

@@ -15,6 +15,7 @@ from network_access import is_ethernet_client
 
 COOKIE_NAME = "schedule_auth"
 GOOGLE_DRIVE_STATE_PREFIX = "schedule-drive:"
+DEFAULT_SLACK_WORKSPACE_URL = "https://aspuru.slack.com"
 
 
 def _is_google_drive_oauth_callback(params):
@@ -32,6 +33,9 @@ def _get_slack_config():
         "client_id": slack["client_id"],
         "client_secret": slack["client_secret"],
         "team_id": slack["team_id"],
+        "workspace_url": str(
+            slack.get("workspace_url", DEFAULT_SLACK_WORKSPACE_URL)
+        ).rstrip("/"),
     }
 
 
@@ -42,12 +46,15 @@ def _get_redirect_uri():
 def _get_auth_url():
     config = _get_slack_config()
     redirect_uri = _get_redirect_uri()
-    return (
-        f"https://slack.com/oauth/v2/authorize?"
-        f"client_id={config['client_id']}&"
-        f"user_scope=identity.basic,identity.email&"
-        f"redirect_uri={urllib.parse.quote(redirect_uri, safe='')}"
+    params = urllib.parse.urlencode(
+        {
+            "client_id": config["client_id"],
+            "user_scope": "identity.basic,identity.email",
+            "redirect_uri": redirect_uri,
+            "team": config["team_id"],
+        }
     )
+    return f"https://slack.com/oauth/v2/authorize?{params}"
 
 
 def _exchange_code(code):
@@ -181,7 +188,7 @@ def require_auth():
         st.info(
             "**Wrong Slack workspace?** If your browser is logged into a different "
             "Slack workspace, the sign-in will redirect there instead of The Matter Lab. To fix this:\n"
-            "1. Open [slack.com/signin](https://slack.com/signin) and sign into the **Aspuru** workspace first\n"
+            f"1. Open [{config['workspace_url']}]({config['workspace_url']}) and sign in first\n"
             "2. Then click the button below to try again\n\n"
             "Or try in an **incognito/private window**."
         )
@@ -199,9 +206,11 @@ def require_auth():
         st.markdown("## The Matter Lab Group Meetings")
         st.caption("schedule.matter.toronto.edu")
         st.write("")
+        workspace_url = config["workspace_url"]
+        workspace_domain = urllib.parse.urlparse(workspace_url).netloc
         st.info(
-            "Sign in with your **The Matter Lab** Slack account to continue.  \n"
-            "Wrong workspace? [Sign into the right one](https://slack.com/signin) first."
+            "Sign in with your **The Matter Lab** Slack account to continue.  \n\n"
+            f"**Workspace URL:** [{workspace_domain}]({workspace_url})"
         )
         st.write("")
         auth_url = _get_auth_url()
