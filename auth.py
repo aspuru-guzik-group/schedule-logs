@@ -208,9 +208,11 @@ def require_auth():
         st.write("")
         workspace_url = config["workspace_url"]
         workspace_domain = urllib.parse.urlparse(workspace_url).netloc
+        workspace_slug = workspace_domain.removesuffix(".slack.com")
         st.info(
             "Sign in with your **The Matter Lab** Slack account to continue.  \n\n"
-            f"**Workspace URL:** [{workspace_domain}]({workspace_url})"
+            f"**If Slack asks for the workspace:** `{workspace_slug}` "
+            f"([{workspace_domain}]({workspace_url}))"
         )
         st.write("")
         auth_url = _get_auth_url()
